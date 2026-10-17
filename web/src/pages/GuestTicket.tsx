@@ -204,8 +204,8 @@ export function GuestTicketPage() {
       {['parked', 'retrieval_requested', 'assigned_in_transit', 'ready_for_pickup', 'out'].includes(t.status) && qr && (
         <div className="card center">
           <img className="qr" src={qr} alt="Your ticket QR code" />
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Show this QR, or say your handover PIN from the SMS, when you collect your car.
+          <p style={{ marginBottom: 0 }}>
+            <strong>Show this QR to the attendant</strong> when you collect your car, or tell them the 4-digit PIN (OTP) from your SMS.
           </p>
         </div>
       )}

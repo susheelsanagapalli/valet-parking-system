@@ -30,7 +30,13 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
     async (proof: { pin?: string; qrToken?: string }) => {
       const res = await run(() => api<{ verified: boolean }>(`/tickets/${ticket.id}/verify`, { body: proof }));
       if (res?.verified) setVerified(true);
-      else if (res) setError('Verification failed. Check the PIN, or ask a supervisor to approve an override.');
+      else if (res) {
+        setError(
+          proof.qrToken
+            ? 'This QR belongs to a different ticket. Check the ticket number, or use the PIN.'
+            : 'Wrong PIN. Check it again, or ask a supervisor to approve an override.',
+        );
+      }
     },
     [run, setError, ticket.id],
   );
@@ -81,12 +87,15 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
       ) : (
         <div className="stack">
           {canScanQr() && (
-            <button type="button" onClick={() => setScanning(true)}>
-              Scan ticket QR
+            <button type="button" className="primary" onClick={() => setScanning(true)}>
+              Scan guest's QR
             </button>
           )}
+          <p className="muted" style={{ margin: 0 }}>
+            Or ask for the 4-digit PIN (OTP) from the guest's ticket SMS:
+          </p>
           <div className="row">
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" placeholder="4-digit handover PIN" style={{ flex: 1 }} aria-label="Handover PIN" />
+            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" placeholder="4-digit PIN (OTP)" style={{ flex: 1 }} aria-label="Handover PIN" />
             <button type="button" disabled={pin.length !== 4 || busy} onClick={() => void verify({ pin })}>
               Check PIN
             </button>

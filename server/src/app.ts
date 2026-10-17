@@ -445,6 +445,19 @@ export function createApp(deps: AppDeps): express.Express {
     }),
   );
 
+  staff.get(
+    '/tickets/by-qr',
+    requirePermission('tickets.view'),
+    wrap((req) => {
+      // Accepts the scanned QR content: the guest page URL or just its token.
+      const token = String(req.query.code ?? '').trim().split('/t/').pop()?.split(/[?#]/)[0] ?? '';
+      const ticket = token ? repo.findTicketByQr(token) : undefined;
+      if (!ticket) throw new HttpError(404, 'This QR is not a ticket from this system');
+      locationFor(req, ticket.location_id);
+      return view(req, ticket);
+    }),
+  );
+
   staff.get('/tickets/:ticketId', requirePermission('tickets.view'), wrap((req) => view(req, ticketFor(req))));
 
   staff.post(

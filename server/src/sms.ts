@@ -194,9 +194,9 @@ export class Notifier {
 /** Message texts; kept short so most fit in one or two SMS segments. */
 export const SMS_TEXT = {
   ticketIssued: (p: { app: string; plate: string; location: string; ticket: string; pin: string; link: string }) =>
-    `${p.app}: Car ${p.plate} parked at ${p.location}. Ticket ${p.ticket}, handover PIN ${p.pin}. Request your car before you arrive: ${p.link}`,
+    `${p.app}: Car ${p.plate} parked at ${p.location}. Ticket ${p.ticket}, PIN (OTP) ${p.pin}. Your ticket QR, and request your car before you arrive: ${p.link}`,
   carReady: (p: { app: string; plate: string; pickup: string; link: string }) =>
-    `${p.app}: Your car ${p.plate} is ready at ${p.pickup}. Show your ticket QR or say your PIN. ${p.link}`,
+    `${p.app}: Your car ${p.plate} is ready at ${p.pickup}. Show your ticket QR to the attendant or tell them your PIN (OTP). ${p.link}`,
   carReparked: (p: { app: string; plate: string; link: string }) =>
     `${p.app}: We parked your car ${p.plate} again as we missed you. Request it when you are close: ${p.link}`,
   receipt: (p: { app: string; ticket: string; amount: number; link: string }) =>

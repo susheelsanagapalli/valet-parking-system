@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { api } from '../api';
+import { QrScanner } from '../components/QrScanner';
 import { SpotForm } from '../components/SpotForm';
 import { TicketSummary } from '../components/TicketSummary';
 import { useAction, usePolling } from '../hooks';
@@ -18,6 +19,20 @@ export function CarsPage() {
   const [filter, setFilter] = useState(0);
   const [query, setQuery] = useState('');
   const [moving, setMoving] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const { setLocationId } = useSession();
+  const onScan = useCallback(
+    async (code: string) => {
+      setScanning(false);
+      const ticket = await action.run(() => api<StaffTicket>(`/tickets/by-qr?code=${encodeURIComponent(code)}`));
+      if (ticket) {
+        if (ticket.location_id !== locationId) setLocationId(ticket.location_id);
+        setQuery(ticket.ticket_number);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [locationId],
+  );
   const statuses = FILTERS[filter]?.statuses ?? '';
   const { data, error, refresh } = usePolling(
     () => api<StaffTicket[]>(`/locations/${locationId}/tickets?${query ? `q=${encodeURIComponent(query)}` : `status=${statuses}`}`),
@@ -33,7 +48,15 @@ export function CarsPage() {
     <div className="card">
       <div className="row" style={{ marginBottom: 12 }}>
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search plate, ticket or mobile" style={{ flex: 1, minWidth: 200 }} />
+        <button type="button" onClick={() => setScanning(!scanning)}>
+          Scan ticket QR
+        </button>
       </div>
+      {scanning && (
+        <div className="card">
+          <QrScanner onResult={(code) => void onScan(code)} onClose={() => setScanning(false)} />
+        </div>
+      )}
       {!query && (
         <div className="segmented" style={{ marginBottom: 12 }}>
           {FILTERS.map((f, i) => (

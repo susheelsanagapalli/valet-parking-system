@@ -127,7 +127,7 @@ describe('guest SMS', () => {
     expect(checkIn.body.sms).toBe('sending');
     await new Promise((r) => setTimeout(r, 20));
     expect(sent[0]?.to).toBe('+919800000001');
-    expect(sent[0]?.text).toContain(`PIN ${checkIn.body.handoverPin as string}`);
+    expect(sent[0]?.text).toContain(`PIN (OTP) ${checkIn.body.handoverPin as string}`);
     expect(sent[0]?.text).toContain(checkIn.body.guestLink);
 
     const id = checkIn.body.ticket.id as string;
@@ -155,7 +155,7 @@ describe('guest SMS', () => {
     const checkIn = await request(smsApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', token).send({ plateNumber: 'TAP1', keyTag: 'K', guestMobile: '9515858993' });
     expect(checkIn.body.sms).toBe('tap_to_send');
     expect(checkIn.body.smsDraft).toMatchObject({ to: '+919515858993' });
-    expect(checkIn.body.smsDraft.text).toContain(`PIN ${checkIn.body.handoverPin as string}`);
+    expect(checkIn.body.smsDraft.text).toContain(`PIN (OTP) ${checkIn.body.handoverPin as string}`);
 
     expect((await request(smsApp).post(`/api/sms/${checkIn.body.smsDraft.id as string}/opened`)).status).toBe(401);
     expect((await request(smsApp).post(`/api/sms/${checkIn.body.smsDraft.id as string}/opened`).set('Authorization', token)).status).toBe(200);
@@ -258,6 +258,11 @@ describe('restaurant flow: check-in to handover via the guest page', () => {
     const wrongPin = handoverPin === '0000' ? '1111' : '0000';
     expect((await request(app).post(`/api/tickets/${ticket.id}/verify`).set('Authorization', holder).send({ pin: wrongPin })).body.verified).toBe(false);
     expect((await request(app).post(`/api/tickets/${ticket.id}/verify`).set('Authorization', holder).send({ qrToken: guestLink })).body.verified).toBe(true);
+
+    // Scanning the guest's QR finds the ticket; a foreign QR is rejected.
+    const found = await request(app).get(`/api/tickets/by-qr?code=${encodeURIComponent(guestLink)}`).set('Authorization', holder);
+    expect(found.body.ticket_number).toBe(checkIn.body.ticket.ticket_number);
+    expect((await request(app).get('/api/tickets/by-qr?code=https%3A%2F%2Fexample.com%2Fnot-a-ticket').set('Authorization', holder)).status).toBe(404);
 
     expect((await request(app).post(`/api/tickets/${ticket.id}/handover`).set('Authorization', holder).send({})).status).toBe(409);
     expect((await request(app).post(`/api/guest/${token}/confirm`).send({ result: 'no_damage' })).status).toBe(200);
