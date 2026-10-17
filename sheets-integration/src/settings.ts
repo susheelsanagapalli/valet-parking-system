@@ -12,8 +12,19 @@ export interface Tariff {
   dailyCap?: number;
 }
 
+/** Operator's own payment QR (FR-PAY-15). Shown to guests only once a platform admin approves it. */
+export interface PaymentQr {
+  imageDataUrl: string;
+  payeeName: string;
+  status: 'pending_approval' | 'approved' | 'rejected';
+  uploadedBy: string;
+  reviewedBy?: string;
+}
+
 /** The subset of the SRS settings catalogue (2.7.1) used by the data layer. */
 export interface LocationSettings {
+  pickupPoints: string[];
+  paymentQr?: PaymentQr;
   spotText: Requirement;
   spotTextLabel: string;
   spotGps: Requirement;
@@ -32,11 +43,14 @@ export interface LocationSettings {
   inAndOut: boolean;
   pauseFeeWhileOut: boolean;
   stayEndDateRequired: boolean;
+  /** Days the guest link works after closure; photos are deleted then too (NFR-SEC-02, FR-DATA-08). */
+  guestLinkExpiryDays: number;
   tariff: Tariff;
 }
 
 /** Catalogue defaults; the Custom profile starts from these. */
 export const CATALOGUE_DEFAULTS: LocationSettings = {
+  pickupPoints: ['Main entrance'],
   spotText: 'required',
   spotTextLabel: 'Parking spot / landmark',
   spotGps: 'off',
@@ -55,6 +69,7 @@ export const CATALOGUE_DEFAULTS: LocationSettings = {
   inAndOut: false,
   pauseFeeWhileOut: false,
   stayEndDateRequired: false,
+  guestLinkExpiryDays: 7,
   tariff: { type: 'hourly', rate: 50, freeMinutes: 0 },
 };
 
@@ -105,5 +120,8 @@ export function validateSettings(s: LocationSettings): string[] {
   if (s.tariff.rate < 0 || s.tariff.freeMinutes < 0) errors.push('Tariff rate and free minutes cannot be negative.');
   if (s.tariff.type === 'flat' && s.inAndOut && s.pauseFeeWhileOut) errors.push('Pausing the fee while out only applies to hourly tariffs.');
   if (s.avgRetrievalMinutes < 0) errors.push('Average retrieval time cannot be negative.');
+  if (s.pickupPoints.length === 0) errors.push('At least one pickup point is required.');
+  if (s.paymentQr && !/^data:image\/(png|jpeg);base64,/.test(s.paymentQr.imageDataUrl)) errors.push('Payment QR must be a PNG or JPEG image.');
+  if (s.paymentQr && s.paymentQr.imageDataUrl.length > 45_000) errors.push('Payment QR image is too large; use an image under 30 KB.');
   return errors;
 }

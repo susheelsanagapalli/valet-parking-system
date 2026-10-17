@@ -4,7 +4,47 @@ A cloud-hosted valet parking platform that replaces paper valet tickets with a d
 
 The same product can be configured for paid parking operators, restaurants, hotels and event venues. Each client runs it under their own app name and branding, sets their own rules and roles, and keeps their data in their own Google Drive and Google Sheets.
 
-This repository currently holds the project's requirements. Source code will be added as development starts.
+## Repository layout
+
+| Folder | What it is |
+| --- | --- |
+| [`docs/`](docs/SRS.md) | Software Requirements Specification |
+| [`sheets-integration/`](sheets-integration/README.md) | Google Sheets and Excel data layer: schema, business rules, write queue, Excel template |
+| `server/` | Express API: staff sign-in and roles, guest ticket endpoints, photo uploads |
+| `web/` | React web app: attendant app, admin settings, payment verification and the guest ticket page |
+
+## Run it locally
+
+Requires Node.js 20 or later.
+
+```bash
+npm install
+npm run build        # data layer, server and web app
+npm start            # http://localhost:8080 with demo data in memory
+```
+
+Sign in at `http://localhost:8080/login` with one of the demo users (`attendant`, `attendant2`, `supervisor`, `admin`, `platform`); the password for all of them is `valet123`. The demo has three locations: a restaurant, a paid car park and a hotel.
+
+To work on the web app with live reload, run `npm run dev:server` and `npm run dev:web` in two terminals, then open `http://localhost:5173`.
+
+To store data in Google Sheets instead of memory, copy `server/.env.example` to `server/.env`, set `STORE=google` and fill in the Google settings described in [sheets-integration/README.md](sheets-integration/README.md).
+
+```bash
+npm test             # data layer and API tests
+```
+
+## What works in this build
+
+- Check-in with plate, key tag, optional guest details and vehicle photos; ticket number, QR code and a handover PIN shown once
+- Parking spot capture by location settings: text, GPS with accuracy check and fallback, spot photo, zone/slot
+- Guest ticket page: status and ETA, "I'll arrive in…" requests, cancel, pay by the location's payment QR with a transaction reference, "Car received, no damage" or damage report, rating
+- Attendant queue with one task per attendant, VIP priority, ready at pickup, guest verification by QR scan or PIN, cash/card payment, signature on the attendant's phone, handover, re-park after a no-show
+- Hotel in-and-out: hand over without closing, guest returned, end stay
+- Supervisor verification of QR payments; platform admin approval of each location's payment QR
+- Location settings editor and new locations from service profiles
+- Staff sign-in with lockout after 5 failed attempts, built-in roles and permission checks on every API call
+
+Not yet built: SMS/WhatsApp sending, user and custom role management screens (users come from a JSON file or the demo seed), photo and personal data deletion jobs, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
 
 ## Documents
 

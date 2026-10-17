@@ -1,0 +1,21 @@
+{
+  "name": "valet-parking-system",
+  "private": true,
+  "description": "Valet Parking System (SRS v1.6): Google Sheets data layer, API server and web app",
+  "workspaces": [
+    "sheets-integration",
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w sheets-integration && npm run build -w server && npm run build -w web",
+    "test": "npm run build -w sheets-integration && npm test -w sheets-integration && npm test -w server",
+    "typecheck": "npm run typecheck --workspaces",
+    "start": "node --env-file-if-exists=server/.env server/dist/main.js",
+    "dev:server": "npm run build -w sheets-integration && npm run dev -w server",
+    "dev:web": "npm run dev -w web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

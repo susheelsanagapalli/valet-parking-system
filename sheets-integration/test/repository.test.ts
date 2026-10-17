@@ -273,6 +273,23 @@ describe('hotel in-and-out', () => {
   });
 });
 
+describe('guest confirmation from the ticket page', () => {
+  it('lets the attendant hand over once the guest has confirmed on their phone', async () => {
+    const { repo, location } = await setup('restaurant');
+    const { ticket } = await repo.checkIn({ locationId: location.id, attendantId: 'a', plateNumber: 'C1', keyTag: 'K' });
+    await repo.recordParkingSpot(ticket.id, { attendantId: 'a', text: 'Lane 1', gps: { lat: 1, lng: 1, accuracyM: 5 } });
+    expect(code(() => repo.confirmHandover(ticket.id, { result: 'no_damage', method: 'ticket_page', by: 'guest' }))).toBe('INVALID_STATE');
+    const { task } = repo.requestRetrieval(ticket.id, { requestedBy: 'guest' });
+    await repo.acceptTask(task.id, 'att');
+    repo.markReady(ticket.id, 'att');
+    expect(code(() => repo.handover(ticket.id, { attendantId: 'att' }))).toBe('CONFIRMATION_REQUIRED');
+    repo.confirmHandover(ticket.id, { result: 'no_damage', method: 'ticket_page', by: 'guest' });
+    expect(code(() => repo.confirmHandover(ticket.id, { result: 'no_damage', method: 'ticket_page', by: 'guest' }))).toBe('INVALID_STATE');
+    expect(repo.handover(ticket.id, { attendantId: 'att' }).status).toBe('closed');
+    expect(repo.exportRows().HandoverConfirmations).toHaveLength(1);
+  });
+});
+
 describe('privacy', () => {
   it('masks the mobile number unless allowed', async () => {
     const { repo, location } = await setup('restaurant');

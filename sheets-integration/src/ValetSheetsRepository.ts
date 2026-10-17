@@ -245,6 +245,33 @@ export class ValetSheetsRepository {
     return this.all<LocationRow>('Locations');
   }
 
+  getLocation(locationId: string): LocationRow {
+    return this.find<LocationRow>('Locations', locationId);
+  }
+
+  /** Tickets at a location, newest first, optionally filtered by status. */
+  listTickets(locationId: string, statuses?: TicketStatus[]): TicketRow[] {
+    return this.all<TicketRow>('Tickets')
+      .filter((t) => t.location_id === locationId && (!statuses || statuses.includes(t.status)))
+      .sort((a, b) => Date.parse(b.checked_in_at) - Date.parse(a.checked_in_at));
+  }
+
+  getTask(taskId: string): TaskRow {
+    return this.find<TaskRow>('Tasks', taskId);
+  }
+
+  tasksForTicket(ticketId: string): TaskRow[] {
+    return this.all<TaskRow>('Tasks').filter((t) => t.ticket_id === ticketId);
+  }
+
+  paymentsForTicket(ticketId: string): PaymentRow[] {
+    return this.all<PaymentRow>('Payments').filter((p) => p.ticket_id === ticketId);
+  }
+
+  photosForTicket(ticketId: string): PhotoRow[] {
+    return this.all<PhotoRow>('Photos').filter((p) => p.ticket_id === ticketId && !p.deleted_at);
+  }
+
   getSettings(locationId: string, version?: number): LocationSettings {
     const location = this.find<LocationRow>('Locations', locationId);
     const wanted = version ?? location.settings_version;
@@ -686,6 +713,39 @@ export class ValetSheetsRepository {
 
   // ---------------------------------------------------------------- handover, in-and-out, incidents
 
+  /** The guest's confirmation for the current handover (made after the car became ready), if any. */
+  currentConfirmation(ticketId: string): HandoverConfirmationRow | undefined {
+    const ticket = this.find<TicketRow>('Tickets', ticketId);
+    if (!ticket.ready_at) return undefined;
+    const since = Date.parse(ticket.ready_at);
+    return this.all<HandoverConfirmationRow>('HandoverConfirmations')
+      .filter((c) => c.ticket_id === ticketId && Date.parse(c.confirmed_at) >= since)
+      .at(-1);
+  }
+
+  /**
+   * Records the guest's no-damage confirmation or damage report while the car is at the pickup point,
+   * from the ticket page or a signature on the attendant's device (FR-OUT-13, FR-OUT-14).
+   */
+  confirmHandover(
+    ticketId: string,
+    input: { result: HandoverResult; method: HandoverMethod; signatureRef?: string; damageDescription?: string; by: string },
+  ): HandoverConfirmationRow {
+    const ticket = this.find<TicketRow>('Tickets', ticketId);
+    if (ticket.status !== 'ready_for_pickup') throw new ValetError('INVALID_STATE', 'The car is not at the pickup point');
+    if (this.currentConfirmation(ticketId)) throw new ValetError('INVALID_STATE', 'This handover has already been confirmed');
+    const row = this.insert<HandoverConfirmationRow>(
+      'HandoverConfirmations',
+      { id: newId(), ticket_id: ticketId, result: input.result, method: input.method, signature_ref: input.signatureRef ?? null, confirmed_at: this.iso() },
+      input.by,
+      'handover.confirm',
+    );
+    if (input.result === 'damage_reported') {
+      this.reportIncident(ticketId, { type: 'damage', description: input.damageDescription ?? 'Reported at handover', reportedBy: input.by });
+    }
+    return row;
+  }
+
   /** Hands the car over (FR-OUT-13, FR-OUT-14, FR-PAY-14, FR-OUT-16). */
   handover(ticketId: string, input: HandoverInput): TicketRow {
     const ticket = this.find<TicketRow>('Tickets', ticketId);
@@ -694,7 +754,7 @@ export class ValetSheetsRepository {
     const by = input.attendantId;
     const goingOut = ticket.is_in_and_out && !input.endOfStay;
 
-    if (s.handoverConfirmation && !input.confirmation) {
+    if (s.handoverConfirmation && !input.confirmation && !this.currentConfirmation(ticketId)) {
       throw new ValetError('CONFIRMATION_REQUIRED', 'The guest must confirm the handover or report damage (FR-OUT-13)');
     }
     const due = this.balanceDue(ticketId);
@@ -705,23 +765,8 @@ export class ValetSheetsRepository {
       this.audit(input.supervisorApprovalBy, 'payment.release_with_balance', 'Tickets', ticketId, null, { balance_due: due });
     }
 
-    if (input.confirmation) {
-      this.insert<HandoverConfirmationRow>(
-        'HandoverConfirmations',
-        {
-          id: newId(),
-          ticket_id: ticketId,
-          result: input.confirmation.result,
-          method: input.confirmation.method,
-          signature_ref: input.confirmation.signatureRef ?? null,
-          confirmed_at: this.iso(),
-        },
-        by,
-        'handover.confirm',
-      );
-      if (input.confirmation.result === 'damage_reported') {
-        this.reportIncident(ticketId, { type: 'damage', description: input.confirmation.damageDescription ?? 'Reported at handover', reportedBy: 'guest' });
-      }
+    if (input.confirmation && !this.currentConfirmation(ticketId)) {
+      this.confirmHandover(ticketId, { ...input.confirmation, by: input.confirmation.method === 'ticket_page' ? 'guest' : by });
     }
 
     const task = this.all<TaskRow>('Tasks').find((t) => t.ticket_id === ticketId && t.type === 'retrieve' && t.status === 'accepted');
