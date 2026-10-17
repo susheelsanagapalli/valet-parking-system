@@ -14,6 +14,7 @@ import { UserDirectory } from './auth.js';
 import { loadConfig } from './config.js';
 import { DrivePhotoStore, LocalPhotoStore, type PhotoStore } from './photos.js';
 import { DEMO_PASSWORD, seedLocations, seedTickets, seedUsers } from './seed.js';
+import { HttpSmsSender, LogSmsSender, Notifier, SmsGateSender } from './sms.js';
 
 const config = loadConfig();
 
@@ -44,6 +45,18 @@ if (config.seedDemo) {
   demoPins = await seedTickets(repo);
 }
 
+const sms = config.sms;
+const notifier =
+  sms.provider === 'off'
+    ? undefined
+    : new Notifier(
+        sms.provider === 'smsgate'
+          ? new SmsGateSender({ url: sms.url, username: sms.username, password: sms.password })
+          : sms.provider === 'httpsms'
+            ? new HttpSmsSender({ apiKey: sms.apiKey, from: sms.from })
+            : new LogSmsSender(),
+      );
+
 const webDist = config.webDist ?? resolve(import.meta.dirname, '../../web/dist');
 const app = createApp({
   repo,
@@ -53,10 +66,11 @@ const app = createApp({
   publicBaseUrl: config.publicBaseUrl,
   webDist,
   demo: config.demoMode ? { password: DEMO_PASSWORD, pins: demoPins } : undefined,
+  notifier,
 });
 
 const server = app.listen(config.port, () => {
-  console.log(`Valet server on http://localhost:${config.port} (store: ${config.store}, photos: ${photos.kind})`);
+  console.log(`Valet server on http://localhost:${config.port} (store: ${config.store}, photos: ${photos.kind}, SMS: ${sms.provider})`);
   if (config.demoMode) console.log(`Test credentials are shown on ${config.publicBaseUrl}/login (removed when NODE_ENV=production)`);
 });
 

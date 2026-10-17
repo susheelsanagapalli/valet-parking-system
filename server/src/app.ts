@@ -13,6 +13,7 @@ import {
 } from '@valet/sheets-integration';
 import { authenticate, can, canAccessLocation, requirePermission, toPublicUser, type StaffUser, type UserDirectory } from './auth.js';
 import { checkFileSignature, decodeImage, type PhotoStore } from './photos.js';
+import { SMS_TEXT, type Notifier, type SmsKind } from './sms.js';
 import { guestTicket, staffTicket } from './views.js';
 
 export interface AppDeps {
@@ -28,6 +29,8 @@ export interface AppDeps {
    * start-up, so testers find every credential on the sign-in page. Never set in production.
    */
   demo?: { password: string; pins: Map<string, string> };
+  /** Guest SMS; when missing, no messages are sent. */
+  notifier?: Notifier;
 }
 
 type Handler = (req: Request, res: Response) => unknown | Promise<unknown>;
@@ -137,6 +140,15 @@ export function createApp(deps: AppDeps): express.Express {
   const view = (req: Request, ticket: TicketRow) => staffTicket(repo, repo.getTicketDetails(ticket.id).ticket, user(req), deps.authSecret, now());
   const guestLink = (t: TicketRow) => `${deps.publicBaseUrl}/t/${t.qr_token}`;
 
+  /** Queues a guest SMS for a ticket; returns false when there is no notifier or no valid mobile. */
+  const sms = (kind: SmsKind, ticket: TicketRow, text: (p: { app: string; plate: string; ticket: string; link: string; location: string }) => string): boolean => {
+    if (!deps.notifier) return false;
+    const details = repo.getTicketDetails(ticket.id, { showFullMobile: true });
+    const location = repo.getLocation(ticket.location_id);
+    const p = { app: location.app_name, plate: details.vehicle?.plate_number ?? '', ticket: ticket.ticket_number, link: guestLink(ticket), location: location.name };
+    return deps.notifier.send(kind, ticket.ticket_number, details.customer?.mobile, text(p));
+  };
+
   // ------------------------------------------------------------------ public
 
   app.get('/api/health', (_req, res) => {
@@ -179,6 +191,8 @@ export function createApp(deps: AppDeps): express.Express {
         password: demo.password,
         users: users.list().map((u) => ({ username: u.username, name: u.name, role: u.role })),
         guestTickets,
+        smsProvider: deps.notifier?.sender.name ?? 'off',
+        sms: deps.notifier?.recent().slice(0, 15) ?? [],
       });
     });
   }
@@ -408,12 +422,12 @@ export function createApp(deps: AppDeps): express.Express {
       );
       const { ticket, handoverPin } = await repo.checkIn({ ...body, locationId, attendantId: user(req).id, photoStorage: photos.kind });
       deps.demo?.pins.set(ticket.id, handoverPin);
+      const sent = sms('ticket_issued', ticket, (p) => SMS_TEXT.ticketIssued({ ...p, pin: handoverPin }));
       return {
         ticket: view(req, ticket),
         handoverPin,
         guestLink: guestLink(ticket),
-        // SMS/WhatsApp sending (FR-NOT-01, FR-NOT-05) is not connected yet; staff share the link or print the ticket.
-        sms: body.guestMobile ? 'not_configured' : 'no_mobile',
+        sms: !body.guestMobile ? 'no_mobile' : !deps.notifier ? 'not_configured' : sent ? 'sending' : 'invalid_mobile',
       };
     }),
   );
@@ -486,7 +500,16 @@ export function createApp(deps: AppDeps): express.Express {
     }),
   );
 
-  staff.post('/tickets/:ticketId/ready', requirePermission('tasks.accept'), wrap((req) => view(req, repo.markReady(ticketFor(req).id, user(req).id))));
+  staff.post(
+    '/tickets/:ticketId/ready',
+    requirePermission('tasks.accept'),
+    wrap((req) => {
+      const ticket = repo.markReady(ticketFor(req).id, user(req).id);
+      const pickup = ticket.pickup_point ?? repo.getSettings(ticket.location_id).pickupPoints[0] ?? 'the pickup point';
+      sms('car_ready', ticket, (p) => SMS_TEXT.carReady({ ...p, pickup }));
+      return view(req, ticket);
+    }),
+  );
 
   staff.post(
     '/tickets/:ticketId/verify',
@@ -535,7 +558,9 @@ export function createApp(deps: AppDeps): express.Express {
     requirePermission('payments.verify'),
     wrap((req) => {
       const body = parse(z.object({ decision: z.enum(['verified', 'rejected']) }), req.body);
-      return repo.verifyPayment(String(req.params.paymentId), body.decision, user(req).id);
+      const payment = repo.verifyPayment(String(req.params.paymentId), body.decision, user(req).id);
+      if (body.decision === 'rejected') sms('payment_rejected', repo.getTicketDetails(payment.ticket_id).ticket, SMS_TEXT.paymentRejected);
+      return payment;
     }),
   );
 
@@ -560,11 +585,24 @@ export function createApp(deps: AppDeps): express.Express {
       if (body.approveBalance && !can(u, 'handover.approve_balance')) {
         throw new HttpError(403, 'Only a supervisor can release a car with a balance due');
       }
-      return view(req, repo.handover(t.id, { attendantId: u.id, supervisorApprovalBy: body.approveBalance ? u.id : undefined, endOfStay: body.endOfStay }));
+      const ticket = repo.handover(t.id, { attendantId: u.id, supervisorApprovalBy: body.approveBalance ? u.id : undefined, endOfStay: body.endOfStay });
+      if (ticket.status === 'closed') {
+        const amount = repo.paymentsForTicket(ticket.id).filter((p) => p.status === 'verified').reduce((s, p) => s + p.amount, 0);
+        sms('receipt', ticket, (p) => SMS_TEXT.receipt({ ...p, amount }));
+      }
+      return view(req, ticket);
     }),
   );
 
-  staff.post('/tickets/:ticketId/repark', requirePermission('tasks.assign'), wrap((req) => view(req, repo.reparkNoShow(ticketFor(req).id, user(req).id))));
+  staff.post(
+    '/tickets/:ticketId/repark',
+    requirePermission('tasks.assign'),
+    wrap((req) => {
+      const ticket = repo.reparkNoShow(ticketFor(req).id, user(req).id);
+      sms('car_reparked', ticket, SMS_TEXT.carReparked);
+      return view(req, ticket);
+    }),
+  );
   staff.post('/tickets/:ticketId/return', requirePermission('parking.record_spot'), wrap((req) => view(req, repo.returnFromOut(ticketFor(req).id, user(req).id).ticket)));
   staff.post('/tickets/:ticketId/end-stay', requirePermission('handover.hand_over'), wrap((req) => view(req, repo.endStay(ticketFor(req).id, user(req).id))));
 

@@ -35,6 +35,31 @@ To store data in Google Sheets instead of memory, copy `server/.env.example` to 
 npm test             # data layer and API tests
 ```
 
+## Guest SMS from your own number (free)
+
+Guests get an SMS with their ticket link and handover PIN at check-in, then "car ready", "parked again" (no-show), a receipt when the ticket closes, and a notice if a QR payment can't be found. Messages are sent from **your own mobile number** by an Android phone with that SIM, using a free gateway app. No paid SMS provider is needed.
+
+By default (`SMS_PROVIDER=log`) nothing is sent: messages appear in the server console and under **Recent SMS** in the Test credentials panel.
+
+To send real SMS from 9515858993:
+
+1. Put the SIM for **9515858993** in an Android phone (Android 5 or later) that stays on, charged and connected to the internet.
+2. Install **SMS Gateway for Android** from https://sms-gate.app (free, open source), allow it to send SMS, and switch on **Cloud server**. Note the username and password it shows.
+3. In `server/.env` set:
+   ```
+   SMS_PROVIDER=smsgate
+   SMSGATE_USERNAME=<username from the app>
+   SMSGATE_PASSWORD=<password from the app>
+   ```
+   If the phone and server are on the same Wi-Fi, you can use the app's **Local server** instead: `SMSGATE_URL=http://<phone-ip>:8080/message`.
+4. Restart the server and check in a car with your own mobile number as the guest.
+
+Alternative: the **httpSMS** app (https://httpsms.com, free plan with a monthly message limit). Set `SMS_PROVIDER=httpsms`, `HTTPSMS_API_KEY=<key from httpsms.com/settings>` and `SMS_FROM=+919515858993`.
+
+Failed messages are retried 3 times; the status of each message is shown under Recent SMS. Mobile numbers without a country code are treated as Indian (+91).
+
+Limits to know before go-live: messages cost whatever your SIM plan charges and are subject to its daily SMS limit (often 100 per day on prepaid plans), and Indian operators may block a personal number that sends a lot of business SMS. For larger volumes, move to a DLT-registered SMS provider (SRS FR-NOT-05).
+
 ## What works in this build
 
 - Check-in with plate, key tag, optional guest details and vehicle photos; ticket number, QR code and a handover PIN shown once
@@ -46,7 +71,7 @@ npm test             # data layer and API tests
 - Location settings editor and new locations from service profiles
 - Staff sign-in with lockout after 5 failed attempts, built-in roles and permission checks on every API call
 
-Not yet built: SMS/WhatsApp sending, user and custom role management screens (users come from a JSON file or the demo seed), photo and personal data deletion jobs, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
+Not yet built: WhatsApp messages and overdue reminders, user and custom role management screens (users come from a JSON file or the demo seed), photo and personal data deletion jobs, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
 
 ## Documents
 

@@ -329,6 +329,12 @@ button:disabled {
 .ticket-item:first-child {
   border-top: 0;
 }
+.ticket-item > * {
+  min-width: 0;
+}
+.wrap {
+  overflow-wrap: anywhere;
+}
 
 .thumbs {
   display: flex;

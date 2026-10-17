@@ -12,7 +12,7 @@ interface CheckInResult {
   ticket: StaffTicket;
   handoverPin: string;
   guestLink: string;
-  sms: 'not_configured' | 'no_mobile';
+  sms: 'sending' | 'not_configured' | 'invalid_mobile' | 'no_mobile';
 }
 
 const EMPTY = { plateNumber: '', keyTag: '', guestMobile: '', guestName: '', make: '', model: '', colour: '', stayEndDate: '' };
@@ -73,7 +73,10 @@ export function CheckInPage() {
               Guest ticket link
             </a>
           </p>
-          {result.sms === 'not_configured' && <div className="notice warn">SMS sending is not connected yet. Let the guest scan the QR or print the ticket.</div>}
+          {result.sms === 'sending' && <div className="notice ok">Ticket link and PIN sent to the guest by SMS.</div>}
+          {result.sms === 'not_configured' && <div className="notice warn">SMS is switched off. Let the guest scan the QR or print the ticket.</div>}
+          {result.sms === 'invalid_mobile' && <div className="notice warn">The mobile number looks wrong, so no SMS was sent. Let the guest scan the QR.</div>}
+          {result.sms === 'no_mobile' && <div className="notice warn">No mobile number: print the ticket for the guest.</div>}
           <div className="row" style={{ justifyContent: 'center' }}>
             <button type="button" onClick={() => window.print()}>
               Print ticket

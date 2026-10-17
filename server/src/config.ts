@@ -14,6 +14,31 @@ export interface Config {
   queuePath: string;
   webDist?: string;
   production: boolean;
+  sms:
+    | { provider: 'off' }
+    | { provider: 'log' }
+    | { provider: 'smsgate'; url: string; username: string; password: string }
+    | { provider: 'httpsms'; apiKey: string; from: string };
+}
+
+function smsConfig(env: Record<string, string | undefined>, production: boolean): Config['sms'] {
+  const provider = env.SMS_PROVIDER ?? (production ? 'off' : 'log');
+  const need = (name: string): string => {
+    const v = env[name];
+    if (!v) throw new Error(`${name} is required when SMS_PROVIDER=${provider}`);
+    return v;
+  };
+  switch (provider) {
+    case 'off':
+    case 'log':
+      return { provider };
+    case 'smsgate':
+      return { provider, url: env.SMSGATE_URL ?? 'https://api.sms-gate.app/3rdparty/v1/message', username: need('SMSGATE_USERNAME'), password: need('SMSGATE_PASSWORD') };
+    case 'httpsms':
+      return { provider, apiKey: need('HTTPSMS_API_KEY'), from: need('SMS_FROM') };
+    default:
+      throw new Error(`Unknown SMS_PROVIDER "${provider}"; use off, log, smsgate or httpsms`);
+  }
 }
 
 const DEV_SECRET = 'dev-only-secret-change-me';
@@ -46,5 +71,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     queuePath: env.QUEUE_PATH ?? 'valet.queue.json',
     webDist: env.WEB_DIST,
     production,
+    sms: smsConfig(env, production),
   };
 }

@@ -8,6 +8,7 @@ import { createApp } from '../src/app.js';
 import { hashPassword, UserDirectory } from '../src/auth.js';
 import { LocalPhotoStore } from '../src/photos.js';
 import { DEMO_PASSWORD, seedLocations, seedUsers } from '../src/seed.js';
+import { Notifier } from '../src/sms.js';
 
 const uploads = mkdtempSync(join(tmpdir(), 'valet-uploads-'));
 afterAll(() => rmSync(uploads, { recursive: true, force: true }));
@@ -110,6 +111,38 @@ describe('test credentials (demo mode only)', () => {
     expect(() => loadConfig({ NODE_ENV: 'production', SEED_DEMO: 'true', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) })).toThrow(/SEED_DEMO/);
     expect(loadConfig({ NODE_ENV: 'production', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) }).demoMode).toBe(false);
     expect(loadConfig({}).demoMode).toBe(true);
+  });
+});
+
+describe('guest SMS', () => {
+  it('texts the ticket link and PIN at check-in, then car ready and receipt', async () => {
+    const sent: Array<{ to: string; text: string }> = [];
+    const notifier = new Notifier({ name: 'test', send: async (to, text) => void sent.push({ to, text }) });
+    const smsApp = createApp({ repo, users, photos: new LocalPhotoStore(uploads), authSecret: 'auth', publicBaseUrl: 'https://valet.example', now: () => new Date(clock), notifier });
+    const token = `Bearer ${(await request(smsApp).post('/api/auth/login').send({ username: 'attendant', password: DEMO_PASSWORD })).body.token as string}`;
+    const loc = byProfile('restaurant');
+
+    const checkIn = await request(smsApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', token).send({ plateNumber: 'SMS1', keyTag: 'K', guestMobile: '98000 00001' });
+    expect(checkIn.body.sms).toBe('sending');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent[0]?.to).toBe('+919800000001');
+    expect(sent[0]?.text).toContain(`PIN ${checkIn.body.handoverPin as string}`);
+    expect(sent[0]?.text).toContain(checkIn.body.guestLink);
+
+    const id = checkIn.body.ticket.id as string;
+    await request(smsApp).post(`/api/tickets/${id}/spot`).set('Authorization', token).send({ text: 'Lane 1', gps: { lat: 1, lng: 1, accuracyM: 5 } });
+    await request(smsApp).post(`/api/tickets/${id}/request`).set('Authorization', token).send({});
+    const queue = await request(smsApp).get(`/api/locations/${loc.id}/queue`).set('Authorization', token);
+    await request(smsApp).post(`/api/tasks/${queue.body.queue[0].task.id as string}/accept`).set('Authorization', token);
+    await request(smsApp).post(`/api/tickets/${id}/ready`).set('Authorization', token);
+    await request(smsApp).post(`/api/tickets/${id}/confirm`).set('Authorization', token).send({ result: 'no_damage', method: 'signature' });
+    await request(smsApp).post(`/api/tickets/${id}/handover`).set('Authorization', token).send({});
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent.map((m) => m.text.split(' ').slice(1, 4).join(' '))).toEqual(['Car SMS1 parked', 'Your car SMS1', 'Thank you! Ticket']);
+    expect(sent[2]?.text).toContain('No charge.');
+
+    const noMobile = await request(smsApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', token).send({ plateNumber: 'SMS2', keyTag: 'K' });
+    expect(noMobile.body.sms).toBe('no_mobile');
   });
 });
 

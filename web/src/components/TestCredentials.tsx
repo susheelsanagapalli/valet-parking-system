@@ -7,7 +7,16 @@ interface DemoCredentials {
   password: string;
   users: Array<{ username: string; name: string; role: string }>;
   guestTickets: Array<{ ticketNumber: string; location: string; status: TicketStatus; guestLink: string; pin: string | null }>;
+  smsProvider: string;
+  sms: Array<{ at: string; ticketNumber: string; to: string; text: string; status: 'sending' | 'sent' | 'failed'; attempts: number; error?: string }>;
 }
+
+const PROVIDER_LABEL: Record<string, string> = {
+  off: 'off',
+  log: 'test mode (shown here, not sent)',
+  smsgate: 'SMS Gateway for Android',
+  httpsms: 'httpSMS',
+};
 
 const ROLE_LABEL: Record<string, string> = {
   platform_admin: 'Platform admin',
@@ -94,6 +103,35 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
             <a className="button" href={t.guestLink} target="_blank" rel="noreferrer">
               Open guest page
             </a>
+          </div>
+        ))}
+      </div>
+
+      <h3>Recent SMS</h3>
+      <p className="muted" style={{ margin: 0 }}>
+        SMS: <strong>{PROVIDER_LABEL[data.smsProvider] ?? data.smsProvider}</strong>
+      </p>
+      {data.sms.length === 0 && <p className="muted">No messages yet. Check in a car with a guest mobile number.</p>}
+      <div>
+        {data.sms.map((m) => (
+          <div className="ticket-item" key={`${m.at}-${m.to}-${m.text.length}`}>
+            <div className="stack" style={{ gap: 2 }}>
+              <div className="row">
+                <span className="mono">{m.to}</span>
+                <span className={`badge ${m.status === 'sent' ? 'ready_for_pickup' : m.status === 'failed' ? 'cancelled' : 'retrieval_requested'}`}>
+                  {m.status === 'sent' ? (data.smsProvider === 'log' ? 'Logged' : 'Sent') : m.status === 'failed' ? 'Failed' : 'Sending'}
+                </span>
+                <span className="muted">
+                  {m.ticketNumber} · {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <span className="wrap">{m.text}</span>
+              {m.error && (
+                <span className="muted">
+                  {m.attempts} attempts: {m.error}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>
