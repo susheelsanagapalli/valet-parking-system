@@ -1,3 +1,4 @@
+import { apiUrl } from '../api';
 import { STATUS_LABEL, type StaffTicket } from '../types';
 
 export function StatusBadge({ status }: { status: StaffTicket['status'] }) {
@@ -48,8 +49,8 @@ export function TicketSummary({ ticket, children }: { ticket: StaffTicket; child
         {ticket.photos.length > 0 && (
           <div className="thumbs">
             {ticket.photos.map((p) => (
-              <a key={p.id} href={p.url} target="_blank" rel="noreferrer">
-                <img src={p.url} alt={`${p.type} photo`} loading="lazy" />
+              <a key={p.id} href={apiUrl(p.url)} target="_blank" rel="noreferrer">
+                <img src={apiUrl(p.url)} alt={`${p.type} photo`} loading="lazy" />
               </a>
             ))}
           </div>

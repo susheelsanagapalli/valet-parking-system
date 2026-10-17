@@ -27,6 +27,8 @@ export interface Config {
   googleRedirectUri: string;
   /** Git commit being run, reported by /api/health so deployments can confirm the new version is live. */
   commit?: string;
+  /** Other web app origins allowed to call the API, e.g. https://<user>.github.io for GitHub Pages. */
+  corsOrigins: string[];
   sms:
     | { provider: 'off' }
     | { provider: 'log' }
@@ -99,6 +101,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     // Google accepts https addresses or localhost, so local testing uses localhost and hosting uses its https address.
     googleRedirectUri: env.GOOGLE_REDIRECT_URI ?? `${hostedUrl ?? `http://localhost:${Number(env.PORT ?? 8080)}`}/api/google/callback`,
     commit: env.RENDER_GIT_COMMIT ?? env.GIT_COMMIT,
+    corsOrigins: (env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((o) => o.trim().replace(/\/$/, ''))
+      .filter(Boolean),
     sms: smsConfig(env, production),
   };
 }

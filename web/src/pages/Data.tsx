@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, errorText, getToken } from '../api';
+import { api, apiUrl, errorText, getToken } from '../api';
 import { useAction, usePolling } from '../hooks';
 
 interface SharedPerson {
@@ -75,7 +75,7 @@ function StatusCard({ status, onChanged, refresh }: { status: DataStatus; onChan
   async function downloadExcel() {
     setMessage(null);
     await action.run(async () => {
-      const res = await fetch('/api/data/export.xlsx', { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
+      const res = await fetch(apiUrl('/api/data/export.xlsx'), { headers: { Authorization: `Bearer ${getToken() ?? ''}` } });
       if (!res.ok) throw new Error(`Download failed (${res.status})`);
       const url = URL.createObjectURL(await res.blob());
       const a = Object.assign(document.createElement('a'), { href: url, download: `valet-data-${new Date().toISOString().slice(0, 10)}.xlsx` });

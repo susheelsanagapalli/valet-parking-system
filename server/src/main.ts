@@ -118,6 +118,7 @@ const app = createApp({
   smsSettings,
   devCertDer: devCert?.der,
   commit: config.commit,
+  corsOrigins: config.corsOrigins,
   extraPublicRoutes: googlePublicRoutes(googleDeps),
   extraStaffRoutes: googleStaffRoutes(googleDeps),
 });

@@ -30,17 +30,21 @@ jobs:
       SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
     steps:
       - name: Check settings
+        id: check
         run: |
           if [ -z "$HOOK" ]; then
-            echo "::error::Add the repository secret RENDER_DEPLOY_HOOK_URL (Render → valet-parking → Settings → Deploy Hook)."
-            exit 1
+            echo "::notice::Render is not set up (no RENDER_DEPLOY_HOOK_URL secret), so the server was not deployed. The web app is published by the GitHub Pages workflow."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Start the Render deploy of this commit
+        if: steps.check.outputs.ready == 'true'
         run: curl -fsS -X POST "${HOOK}&ref=${GITHUB_SHA}" > /dev/null && echo "Deploy of ${GITHUB_SHA::7} started"
 
       - name: Wait until the new version is live
-        if: env.SERVICE_URL != ''
+        if: steps.check.outputs.ready == 'true' && env.SERVICE_URL != ''
         run: |
           for i in $(seq 1 80); do
             live=$(curl -fsS --max-time 20 "${SERVICE_URL%/}/api/health" | jq -r '.commit // empty' || true)

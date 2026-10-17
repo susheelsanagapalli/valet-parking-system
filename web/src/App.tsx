@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { IS_PREVIEW_WITHOUT_SERVER } from './api';
 import { CarsPage } from './pages/Cars';
 import { CheckInPage } from './pages/CheckIn';
 import { DashboardPage } from './pages/Dashboard';
@@ -11,7 +12,27 @@ import { QueuePage } from './pages/Queue';
 import { SettingsPage } from './pages/Settings';
 import { StaffHome, StaffLayout } from './pages/StaffLayout';
 
+/** Shown on the GitHub Pages preview, which has no server behind it. */
+function PreviewBanner() {
+  if (!IS_PREVIEW_WITHOUT_SERVER) return null;
+  return (
+    <div className="notice warn" role="status" style={{ borderRadius: 0, textAlign: 'center' }}>
+      <strong>Preview on GitHub Pages.</strong> These are the app's screens only: signing in, check-in and saving need the Valet server, which GitHub Pages cannot run. Ask the
+      administrator for the live address.
+    </div>
+  );
+}
+
 export function App() {
+  return (
+    <>
+      <PreviewBanner />
+      <AppRoutes />
+    </>
+  );
+}
+
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/t/:token" element={<GuestTicketPage />} />

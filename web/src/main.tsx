@@ -10,7 +10,7 @@ if (!root) throw new Error('Missing #root');
 
 createRoot(root).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
       <SessionProvider>
         <App />
       </SessionProvider>

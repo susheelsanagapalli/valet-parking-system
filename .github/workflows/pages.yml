@@ -1,0 +1,62 @@
+name: Deploy web app to GitHub Pages
+
+# Publishes the web app (screens) to https://<owner>.github.io/<repository>/ on every push to main.
+# GitHub Pages cannot run the Valet server. Set the repository variable VALET_API_URL to a running
+# server's address (and CORS_ORIGINS on that server) to make the Pages site fully working; without it
+# the site shows a preview notice.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the web app for GitHub Pages
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_API_BASE: ${{ vars.VALET_API_URL }}
+          VITE_PREVIEW: 'true'
+        run: npm run build -w sheets-integration && npm run build -w web
+
+      # Pages has no server-side routing: serve the app for unknown paths too (e.g. /staff, /t/<token>).
+      - run: cp web/dist/index.html web/dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

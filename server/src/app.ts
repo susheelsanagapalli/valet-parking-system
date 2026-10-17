@@ -27,6 +27,8 @@ export interface AppDeps {
   now?: () => Date;
   /** Git commit being run, shown by /api/health. */
   commit?: string;
+  /** Web app addresses on other origins (e.g. GitHub Pages) allowed to call this API. */
+  corsOrigins?: string[];
   /**
    * Demo mode only: the shared demo password and the handover PIN of each ticket checked in since
    * start-up, so testers find every credential on the sign-in page. Never set in production.
@@ -132,6 +134,25 @@ export function createApp(deps: AppDeps): express.Express {
   const now = deps.now ?? (() => new Date());
   const app = express();
   app.disable('x-powered-by');
+  if (deps.corsOrigins?.length) {
+    // Sign-in uses a bearer token, not cookies, so allowing listed origins exposes no session.
+    const allowed = new Set(deps.corsOrigins);
+    app.use('/api', (req, res, next) => {
+      const origin = req.header('origin');
+      if (origin && allowed.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Max-Age', '600');
+      }
+      if (req.method === 'OPTIONS') {
+        res.sendStatus(origin && allowed.has(origin) ? 204 : 403);
+        return;
+      }
+      next();
+    });
+  }
   app.use(express.json({ limit: '1mb' }));
 
   const user = (req: Request): StaffUser => {

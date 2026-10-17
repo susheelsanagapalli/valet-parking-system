@@ -107,6 +107,16 @@ describe('test credentials (demo mode only)', () => {
     expect((await request(app).get('/api/demo/credentials')).status).toBe(401);
   });
 
+  it('lets a web app on GitHub Pages call the API only from allowed origins', async () => {
+    const corsApp = createApp({ repo, users, photos: new LocalPhotoStore(uploads), authSecret: 'auth', publicBaseUrl: 'x', corsOrigins: ['https://susheelsanagapalli.github.io'] });
+    const ok = await request(corsApp).options('/api/auth/login').set('Origin', 'https://susheelsanagapalli.github.io');
+    expect(ok.status).toBe(204);
+    expect(ok.headers['access-control-allow-origin']).toBe('https://susheelsanagapalli.github.io');
+    const bad = await request(corsApp).options('/api/auth/login').set('Origin', 'https://evil.example');
+    expect(bad.status).toBe(403);
+    expect(bad.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
   it('uses the hosting address on Render and keeps localhost locally', async () => {
     const { loadConfig } = await import('../src/config.js');
     const hosted = loadConfig({ RENDER_EXTERNAL_URL: 'https://valet-parking.onrender.com', RENDER_GIT_COMMIT: 'abc123', DATA_DIR: '/var/data', PORT: '10000' });
