@@ -23,7 +23,9 @@ npm run build        # data layer, server and web app
 npm start            # http://localhost:8080 with demo data in memory
 ```
 
-Sign in at `http://localhost:8080/login` with one of the demo users (`attendant`, `attendant2`, `supervisor`, `admin`, `platform`); the password for all of them is `valet123`. The demo has three locations: a restaurant, a paid car park and a hotel.
+Open `http://localhost:8080/login`. Until go-live, the sign-in page shows a **Test credentials** panel with every demo staff login (password `valet123` for all), a **Use** button to fill in the form, and the guest page link and handover PIN of each open ticket. The demo has three locations (a restaurant, a paid car park and a hotel) and starts with two parked cars.
+
+The panel and demo data only exist in demo mode. With `NODE_ENV=production` they are switched off, and the server refuses to start if `SEED_DEMO=true`.
 
 To work on the web app with live reload, run `npm run dev:server` and `npm run dev:web` in two terminals, then open `http://localhost:5173`.
 

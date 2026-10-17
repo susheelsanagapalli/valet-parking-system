@@ -23,6 +23,11 @@ export interface AppDeps {
   publicBaseUrl: string;
   webDist?: string;
   now?: () => Date;
+  /**
+   * Demo mode only: the shared demo password and the handover PIN of each ticket checked in since
+   * start-up, so testers find every credential on the sign-in page. Never set in production.
+   */
+  demo?: { password: string; pins: Map<string, string> };
 }
 
 type Handler = (req: Request, res: Response) => unknown | Promise<unknown>;
@@ -152,6 +157,31 @@ export function createApp(deps: AppDeps): express.Express {
       return { token: result.token, user: toPublicUser(result.user) };
     }),
   );
+
+  if (deps.demo) {
+    const demo = deps.demo;
+    const OPEN: TicketStatus[] = ['checked_in', 'parked', 'retrieval_requested', 'assigned_in_transit', 'ready_for_pickup', 'out'];
+    app.get('/api/demo/credentials', (_req, res) => {
+      const guestTickets = repo
+        .listLocations()
+        .flatMap((l) => repo.listTickets(l.id, OPEN).map((t) => ({ t, location: l.name })))
+        .sort((a, b) => Date.parse(b.t.checked_in_at) - Date.parse(a.t.checked_in_at))
+        .slice(0, 20)
+        .map(({ t, location }) => ({
+          ticketNumber: t.ticket_number,
+          location,
+          status: t.status,
+          guestLink: guestLink(t),
+          pin: demo.pins.get(t.id) ?? null,
+        }));
+      res.json({
+        notice: 'Test environment only. These credentials are removed at go-live (NODE_ENV=production).',
+        password: demo.password,
+        users: users.list().map((u) => ({ username: u.username, name: u.name, role: u.role })),
+        guestTickets,
+      });
+    });
+  }
 
   app.get(
     '/api/files',
@@ -377,6 +407,7 @@ export function createApp(deps: AppDeps): express.Express {
         req.body,
       );
       const { ticket, handoverPin } = await repo.checkIn({ ...body, locationId, attendantId: user(req).id, photoStorage: photos.kind });
+      deps.demo?.pins.set(ticket.id, handoverPin);
       return {
         ticket: view(req, ticket),
         handoverPin,

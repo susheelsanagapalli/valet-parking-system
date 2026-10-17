@@ -3,6 +3,8 @@ export interface Config {
   publicBaseUrl: string;
   store: 'memory' | 'google';
   seedDemo: boolean;
+  /** Shows test credentials on the sign-in page; never on in production. */
+  demoMode: boolean;
   authSecret: string;
   pinSecret: string;
   staffUsersFile?: string;
@@ -25,11 +27,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     return `${DEV_SECRET}-${name}`;
   };
   const store = env.STORE === 'google' ? 'google' : 'memory';
+  const seedDemo = env.SEED_DEMO ? env.SEED_DEMO === 'true' : store === 'memory' && !production;
+  if (production && seedDemo) {
+    throw new Error('SEED_DEMO must be false in production: demo users and test credentials must not go live');
+  }
   return {
     port: Number(env.PORT ?? 8080),
     publicBaseUrl: (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
     store,
-    seedDemo: env.SEED_DEMO ? env.SEED_DEMO === 'true' : store === 'memory',
+    seedDemo,
+    demoMode: seedDemo && !production,
     authSecret: secret('AUTH_SECRET'),
     pinSecret: secret('PIN_HMAC_SECRET'),
     staffUsersFile: env.STAFF_USERS_FILE || undefined,

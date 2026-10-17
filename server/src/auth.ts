@@ -109,6 +109,10 @@ export class UserDirectory {
     return this.users.size;
   }
 
+  list(): StaffUser[] {
+    return [...this.users.values()];
+  }
+
   byId(id: string): StaffUser | undefined {
     return this.users.get(id);
   }

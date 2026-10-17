@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
+import { TestCredentials } from '../components/TestCredentials';
 import { useAction } from '../hooks';
 import { useSession } from '../session';
 
@@ -36,6 +37,13 @@ export function LoginPage() {
         </form>
       </div>
       <p className="muted center">Guests: open the link from your ticket SMS to see your car.</p>
+      <TestCredentials
+        onUse={(u, p) => {
+          setUsername(u);
+          setPassword(p);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
     </div>
   );
 }

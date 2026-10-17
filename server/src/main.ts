@@ -13,7 +13,7 @@ import { createApp } from './app.js';
 import { UserDirectory } from './auth.js';
 import { loadConfig } from './config.js';
 import { DrivePhotoStore, LocalPhotoStore, type PhotoStore } from './photos.js';
-import { DEMO_PASSWORD, seedLocations, seedUsers } from './seed.js';
+import { DEMO_PASSWORD, seedLocations, seedTickets, seedUsers } from './seed.js';
 
 const config = loadConfig();
 
@@ -37,19 +37,27 @@ const repo = new ValetSheetsRepository({
 await repo.load();
 
 const users = config.staffUsersFile ? UserDirectory.fromFile(config.staffUsersFile, config.authSecret) : new UserDirectory(config.authSecret);
+let demoPins = new Map<string, string>();
 if (config.seedDemo) {
   seedLocations(repo);
   seedUsers(users);
+  demoPins = await seedTickets(repo);
 }
 
 const webDist = config.webDist ?? resolve(import.meta.dirname, '../../web/dist');
-const app = createApp({ repo, users, photos, authSecret: config.authSecret, publicBaseUrl: config.publicBaseUrl, webDist });
+const app = createApp({
+  repo,
+  users,
+  photos,
+  authSecret: config.authSecret,
+  publicBaseUrl: config.publicBaseUrl,
+  webDist,
+  demo: config.demoMode ? { password: DEMO_PASSWORD, pins: demoPins } : undefined,
+});
 
 const server = app.listen(config.port, () => {
   console.log(`Valet server on http://localhost:${config.port} (store: ${config.store}, photos: ${photos.kind})`);
-  if (config.seedDemo && !config.staffUsersFile) {
-    console.log(`Demo users: platform, admin, supervisor, attendant, attendant2 — password "${DEMO_PASSWORD}"`);
-  }
+  if (config.demoMode) console.log(`Test credentials are shown on ${config.publicBaseUrl}/login (removed when NODE_ENV=production)`);
 });
 
 async function shutdown(signal: string): Promise<void> {

@@ -78,6 +78,41 @@ describe('auth and permissions', () => {
   });
 });
 
+describe('test credentials (demo mode only)', () => {
+  it('lists staff logins and open guest tickets with their PINs', async () => {
+    const demoApp = createApp({
+      repo,
+      users,
+      photos: new LocalPhotoStore(uploads),
+      authSecret: 'auth',
+      publicBaseUrl: 'https://valet.example',
+      now: () => new Date(clock),
+      demo: { password: DEMO_PASSWORD, pins: new Map() },
+    });
+    const attendant = `Bearer ${(await request(demoApp).post('/api/auth/login').send({ username: 'attendant', password: DEMO_PASSWORD })).body.token as string}`;
+    const loc = byProfile('restaurant');
+    const checkIn = await request(demoApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', attendant).send({ plateNumber: 'DM1', keyTag: 'K' });
+
+    const res = await request(demoApp).get('/api/demo/credentials');
+    expect(res.status).toBe(200);
+    expect(res.body.password).toBe(DEMO_PASSWORD);
+    expect(res.body.users.map((u: { username: string }) => u.username)).toContain('platform');
+    expect(res.body.users[0]).not.toHaveProperty('passwordHash');
+    expect(res.body.guestTickets[0]).toMatchObject({ ticketNumber: checkIn.body.ticket.ticket_number, pin: checkIn.body.handoverPin, guestLink: checkIn.body.guestLink });
+  });
+
+  it('is not available outside demo mode', async () => {
+    expect((await request(app).get('/api/demo/credentials')).status).toBe(401);
+  });
+
+  it('refuses to start production with demo data', async () => {
+    const { loadConfig } = await import('../src/config.js');
+    expect(() => loadConfig({ NODE_ENV: 'production', SEED_DEMO: 'true', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) })).toThrow(/SEED_DEMO/);
+    expect(loadConfig({ NODE_ENV: 'production', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) }).demoMode).toBe(false);
+    expect(loadConfig({}).demoMode).toBe(true);
+  });
+});
+
 describe('restaurant flow: check-in to handover via the guest page', () => {
   it('runs the whole journey', async () => {
     const loc = byProfile('restaurant');

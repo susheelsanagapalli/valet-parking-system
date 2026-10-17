@@ -19,6 +19,26 @@ export function seedLocations(repo: ValetSheetsRepository): void {
   repo.createLocation({ name: 'Grand Palace Hotel', address: '5 Palace Road, Bengaluru', serviceProfile: 'hotel', appName: 'ValetPay', ticketPrefix: 'GP', createdBy: 'seed' });
 }
 
+/** Two parked cars so testers can open a guest page straight away. Returns ticket id → handover PIN. */
+export async function seedTickets(repo: ValetSheetsRepository): Promise<Map<string, string>> {
+  const pins = new Map<string, string>();
+  const locations = repo.listLocations();
+  if (locations.some((l) => repo.listTickets(l.id).length > 0)) return pins;
+  const restaurant = locations.find((l) => l.service_profile === 'restaurant');
+  const paid = locations.find((l) => l.service_profile === 'paid_parking');
+  if (restaurant) {
+    const { ticket, handoverPin } = await repo.checkIn({ locationId: restaurant.id, attendantId: 'seed', plateNumber: 'KA03TT1001', keyTag: 'K-21', guestMobile: '+919800000001', guestName: 'Test Guest', make: 'Honda', model: 'City', colour: 'Silver' });
+    await repo.recordParkingSpot(ticket.id, { attendantId: 'seed', text: 'Near the side gate', gps: { lat: 12.9759, lng: 77.6046, accuracyM: 6 } });
+    pins.set(ticket.id, handoverPin);
+  }
+  if (paid) {
+    const { ticket, handoverPin } = await repo.checkIn({ locationId: paid.id, attendantId: 'seed', plateNumber: 'KA03TT2002', keyTag: 'K-22', guestMobile: '+919800000002', make: 'Tata', model: 'Nexon', colour: 'Blue' });
+    await repo.recordParkingSpot(ticket.id, { attendantId: 'seed', zoneCode: 'B2', slotNumber: '14' });
+    pins.set(ticket.id, handoverPin);
+  }
+  return pins;
+}
+
 /** Demo users for each built-in role; all share DEMO_PASSWORD. */
 export function seedUsers(users: UserDirectory): void {
   if (users.size > 0) return;
