@@ -8,7 +8,7 @@ This repository currently holds the project's requirements. Source code will be 
 
 | Document | Description |
 | --- | --- |
-| [Software Requirements Specification](docs/SRS.md) | Functional and non-functional requirements for v1.0 (IEEE 830 / ISO/IEC/IEEE 29148 structure) |
+| [Software Requirements Specification](docs/SRS.md) | Functional and non-functional requirements for v1.0, document version 1.1 (IEEE 830 / ISO/IEC/IEEE 29148 structure) |
 
 ## System at a glance
 
@@ -31,4 +31,4 @@ This repository currently holds the project's requirements. Source code will be 
 
 ## Status
 
-Requirements baseline: **SRS v1.0** (October 2026). Open questions are listed in [section 8 of the SRS](docs/SRS.md#8-open-questions).
+Requirements baseline: **SRS v1.1** (October 2026). Open questions are listed in [section 8 of the SRS](docs/SRS.md#8-open-questions).
