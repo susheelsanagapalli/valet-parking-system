@@ -8,7 +8,8 @@ import { createApp } from '../src/app.js';
 import { hashPassword, UserDirectory } from '../src/auth.js';
 import { LocalPhotoStore } from '../src/photos.js';
 import { DEMO_PASSWORD, seedLocations, seedUsers } from '../src/seed.js';
-import { Notifier } from '../src/sms.js';
+import { ManualSmsSender, Notifier, OffSmsSender } from '../src/sms.js';
+import { SmsSettingsStore } from '../src/smsSettings.js';
 
 const uploads = mkdtempSync(join(tmpdir(), 'valet-uploads-'));
 afterAll(() => rmSync(uploads, { recursive: true, force: true }));
@@ -143,6 +144,63 @@ describe('guest SMS', () => {
 
     const noMobile = await request(smsApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', token).send({ plateNumber: 'SMS2', keyTag: 'K' });
     expect(noMobile.body.sms).toBe('no_mobile');
+  });
+
+  it('tap-to-send: returns a draft for the Messages app and records when it is opened', async () => {
+    const notifier = new Notifier(new ManualSmsSender());
+    const smsApp = createApp({ repo, users, photos: new LocalPhotoStore(uploads), authSecret: 'auth', publicBaseUrl: 'https://valet.example', now: () => new Date(clock), notifier });
+    const token = `Bearer ${(await request(smsApp).post('/api/auth/login').send({ username: 'attendant', password: DEMO_PASSWORD })).body.token as string}`;
+    const loc = byProfile('restaurant');
+
+    const checkIn = await request(smsApp).post(`/api/locations/${loc.id}/tickets`).set('Authorization', token).send({ plateNumber: 'TAP1', keyTag: 'K', guestMobile: '9515858993' });
+    expect(checkIn.body.sms).toBe('tap_to_send');
+    expect(checkIn.body.smsDraft).toMatchObject({ to: '+919515858993' });
+    expect(checkIn.body.smsDraft.text).toContain(`PIN ${checkIn.body.handoverPin as string}`);
+
+    expect((await request(smsApp).post(`/api/sms/${checkIn.body.smsDraft.id as string}/opened`)).status).toBe(401);
+    expect((await request(smsApp).post(`/api/sms/${checkIn.body.smsDraft.id as string}/opened`).set('Authorization', token)).status).toBe(200);
+    expect(notifier.recent()[0]?.status).toBe('opened');
+
+    const id = checkIn.body.ticket.id as string;
+    await request(smsApp).post(`/api/tickets/${id}/spot`).set('Authorization', token).send({ text: 'Lane 1', gps: { lat: 1, lng: 1, accuracyM: 5 } });
+    await request(smsApp).post(`/api/tickets/${id}/request`).set('Authorization', token).send({});
+    const queue = await request(smsApp).get(`/api/locations/${loc.id}/queue`).set('Authorization', token);
+    await request(smsApp).post(`/api/tasks/${queue.body.queue[0].task.id as string}/accept`).set('Authorization', token);
+    const ready = await request(smsApp).post(`/api/tickets/${id}/ready`).set('Authorization', token);
+    expect(ready.body.smsDraft.text).toContain('is ready at Main entrance');
+  });
+});
+
+describe('SMS settings from the admin panel', () => {
+  it('switches between iPhone tap-to-send and the Android gateway', async () => {
+    const notifier = new Notifier(new OffSmsSender());
+    const smsSettings = new SmsSettingsStore();
+    const smsApp = createApp({ repo, users, photos: new LocalPhotoStore(uploads), authSecret: 'auth', publicBaseUrl: 'https://valet.example', now: () => new Date(clock), notifier, smsSettings });
+    const login = async (u: string) => `Bearer ${(await request(smsApp).post('/api/auth/login').send({ username: u, password: DEMO_PASSWORD })).body.token as string}`;
+    const admin = await login('admin');
+    const attendant = await login('attendant');
+
+    expect((await request(smsApp).get('/api/sms/config').set('Authorization', attendant)).status).toBe(403);
+    const empty = await request(smsApp).get('/api/sms/config').set('Authorization', admin);
+    expect(empty.body).toMatchObject({ settings: null, activeMethod: 'off' });
+    expect(empty.body.androidDownload).toBe('https://github.com/capcom6/android-sms-gateway/releases/latest/download/app-release.apk');
+
+    expect((await request(smsApp).put('/api/sms/config').set('Authorization', admin).send({ phoneType: 'iphone', senderNumber: '12345' })).status).toBe(400);
+    const iphone = await request(smsApp).put('/api/sms/config').set('Authorization', admin).send({ phoneType: 'iphone', senderNumber: '9515858993' });
+    expect(iphone.body).toMatchObject({ activeMethod: 'manual', settings: { phoneType: 'iphone', senderNumber: '+919515858993' } });
+    const test = await request(smsApp).post('/api/sms/test').set('Authorization', admin).send({});
+    expect(test.body.smsDraft.to).toBe('+919515858993');
+
+    expect((await request(smsApp).put('/api/sms/config').set('Authorization', admin).send({ phoneType: 'android', senderNumber: '9515858993', android: { username: 'gw' } })).status).toBe(400);
+    const android = await request(smsApp)
+      .put('/api/sms/config')
+      .set('Authorization', admin)
+      .send({ phoneType: 'android', senderNumber: '9515858993', android: { username: 'gw', password: 'secret' } });
+    expect(android.body).toMatchObject({ activeMethod: 'smsgate', settings: { android: { username: 'gw', hasPassword: true } } });
+    expect(JSON.stringify(android.body)).not.toContain('secret');
+    // Saving again without a password keeps the stored one.
+    const again = await request(smsApp).put('/api/sms/config').set('Authorization', admin).send({ phoneType: 'android', senderNumber: '9515858993', android: { username: 'gw2' } });
+    expect(again.body.settings.android).toMatchObject({ username: 'gw2', hasPassword: true });
   });
 });
 

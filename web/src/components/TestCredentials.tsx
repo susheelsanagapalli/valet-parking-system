@@ -8,11 +8,20 @@ interface DemoCredentials {
   users: Array<{ username: string; name: string; role: string }>;
   guestTickets: Array<{ ticketNumber: string; location: string; status: TicketStatus; guestLink: string; pin: string | null }>;
   smsProvider: string;
-  sms: Array<{ at: string; ticketNumber: string; to: string; text: string; status: 'sending' | 'sent' | 'failed'; attempts: number; error?: string }>;
+  sms: Array<{ at: string; ticketNumber: string; to: string; text: string; status: 'sending' | 'sent' | 'failed' | 'awaiting_tap' | 'opened'; attempts: number; error?: string }>;
 }
+
+const SMS_STATUS: Record<string, { label: string; badge: string }> = {
+  sending: { label: 'Sending', badge: 'retrieval_requested' },
+  sent: { label: 'Sent', badge: 'ready_for_pickup' },
+  failed: { label: 'Failed', badge: 'cancelled' },
+  awaiting_tap: { label: 'Waiting for staff to send', badge: 'retrieval_requested' },
+  opened: { label: 'Opened in Messages', badge: 'ready_for_pickup' },
+};
 
 const PROVIDER_LABEL: Record<string, string> = {
   off: 'off',
+  manual: 'tap-to-send from the staff phone (iPhone or Android)',
   log: 'test mode (shown here, not sent)',
   smsgate: 'SMS Gateway for Android',
   httpsms: 'httpSMS',
@@ -118,8 +127,8 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
             <div className="stack" style={{ gap: 2 }}>
               <div className="row">
                 <span className="mono">{m.to}</span>
-                <span className={`badge ${m.status === 'sent' ? 'ready_for_pickup' : m.status === 'failed' ? 'cancelled' : 'retrieval_requested'}`}>
-                  {m.status === 'sent' ? (data.smsProvider === 'log' ? 'Logged' : 'Sent') : m.status === 'failed' ? 'Failed' : 'Sending'}
+                <span className={`badge ${SMS_STATUS[m.status]?.badge ?? ''}`}>
+                  {m.status === 'sent' && data.smsProvider === 'log' ? 'Logged' : (SMS_STATUS[m.status]?.label ?? m.status)}
                 </span>
                 <span className="muted">
                   {m.ticketNumber} · {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

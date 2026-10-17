@@ -39,22 +39,14 @@ npm test             # data layer and API tests
 
 Guests get an SMS with their ticket link and handover PIN at check-in, then "car ready", "parked again" (no-show), a receipt when the ticket closes, and a notice if a QR payment can't be found. Messages are sent from **your own mobile number** by an Android phone with that SIM, using a free gateway app. No paid SMS provider is needed.
 
-By default (`SMS_PROVIDER=log`) nothing is sent: messages appear in the server console and under **Recent SMS** in the Test credentials panel.
+Set it up in the app: sign in as `admin`, open **Settings → Guest SMS**, enter the sender mobile number, and choose where that SIM is:
 
-To send real SMS from 9515858993:
+- **iPhone:** nothing to download. iPhones don't let apps send SMS by themselves, so after check-in, "car ready" and handover the app shows a **Send SMS** button that opens Messages with the guest's number and text filled in; one tap on Send delivers it from the iPhone's number. Open the staff app on that iPhone (the screen shows a QR code) and add it to the home screen.
+- **Android:** fully automatic. The screen gives a QR code and button to download the free **SMS Gateway for Android** app ([direct APK](https://github.com/capcom6/android-sms-gateway/releases/latest/download/app-release.apk), official GitHub release; not on Google Play). Install it on the phone with the SIM, allow SMS, switch on **Cloud server**, and copy the username and password it shows into the screen.
 
-1. Put the SIM for **9515858993** in an Android phone (Android 5 or later) that stays on, charged and connected to the internet.
-2. Install **SMS Gateway for Android** from https://sms-gate.app (free, open source), allow it to send SMS, and switch on **Cloud server**. Note the username and password it shows.
-3. In `server/.env` set:
-   ```
-   SMS_PROVIDER=smsgate
-   SMSGATE_USERNAME=<username from the app>
-   SMSGATE_PASSWORD=<password from the app>
-   ```
-   If the phone and server are on the same Wi-Fi, you can use the app's **Local server** instead: `SMSGATE_URL=http://<phone-ip>:8080/message`.
-4. Restart the server and check in a car with your own mobile number as the guest.
+Then use **Send a test SMS** on the same screen. The settings are saved on the server in `sms-settings.json` (not in git); the gateway password is never shown again.
 
-Alternative: the **httpSMS** app (https://httpsms.com, free plan with a monthly message limit). Set `SMS_PROVIDER=httpsms`, `HTTPSMS_API_KEY=<key from httpsms.com/settings>` and `SMS_FROM=+919515858993`.
+Without saved settings, the server falls back to `SMS_PROVIDER` in `server/.env` (default `manual`, tap-to-send). `log` only prints messages, and `httpsms` uses the httpSMS app (https://httpsms.com) with `HTTPSMS_API_KEY` and `SMS_FROM`.
 
 Failed messages are retried 3 times; the status of each message is shown under Recent SMS. Mobile numbers without a country code are treated as Indian (+91).
 

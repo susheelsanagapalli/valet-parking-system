@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 /**
  * Guest SMS (SRS FR-NOT-01, FR-NOT-04, FR-NOT-05).
  *
@@ -5,12 +7,28 @@
  * that SIM acts as the gateway, through one of two free apps:
  * - SMS Gateway for Android (sms-gate.app): cloud or local-network API, basic auth.
  * - httpSMS (httpsms.com): cloud API with an API key; the free plan has a monthly limit.
+ * "manual" (tap-to-send) works with iPhones: staff send each message from Messages with one tap.
  * "log" prints messages instead of sending them, for development and testing.
  */
 
 export interface SmsSender {
   readonly name: string;
+  /** True when staff send each message themselves from their phone's Messages app. */
+  readonly manual?: boolean;
   send(to: string, text: string): Promise<void>;
+}
+
+/**
+ * Tap-to-send: works with any phone, including iPhone, which cannot send SMS for a server. The app
+ * shows staff a button that opens Messages with the number and text filled in; the message goes
+ * from that phone's own number when they tap Send.
+ */
+export class ManualSmsSender implements SmsSender {
+  readonly name = 'manual';
+  readonly manual = true;
+  async send(): Promise<void> {
+    throw new Error('Manual messages are sent by staff from their phone');
+  }
 }
 
 /** Converts Indian 10-digit numbers (with or without 0/+91) to +91XXXXXXXXXX; leaves other +E.164 numbers as they are. */
@@ -27,6 +45,14 @@ async function check(res: Response, provider: string): Promise<void> {
   if (res.ok) return;
   const body = await res.text().catch(() => '');
   throw new Error(`${provider} responded ${res.status}: ${body.slice(0, 200)}`);
+}
+
+/** SMS switched off until an admin sets it up. */
+export class OffSmsSender implements SmsSender {
+  readonly name = 'off';
+  async send(): Promise<void> {
+    throw new Error('SMS is not set up');
+  }
 }
 
 export class LogSmsSender implements SmsSender {
@@ -70,14 +96,23 @@ export class HttpSmsSender implements SmsSender {
 export type SmsKind = 'ticket_issued' | 'car_ready' | 'car_reparked' | 'receipt' | 'payment_rejected';
 
 export interface SmsLogEntry {
+  id: string;
   at: string;
   kind: SmsKind;
   ticketNumber: string;
   to: string;
   text: string;
-  status: 'sending' | 'sent' | 'failed';
+  /** awaiting_tap / opened: tap-to-send messages waiting for, or opened by, staff. */
+  status: 'sending' | 'sent' | 'failed' | 'awaiting_tap' | 'opened';
   attempts: number;
   error?: string;
+}
+
+/** What the app needs to open the phone's Messages app with the message filled in. */
+export interface SmsDraft {
+  id: string;
+  to: string;
+  text: string;
 }
 
 /**
@@ -88,18 +123,48 @@ export class Notifier {
   private readonly log: SmsLogEntry[] = [];
 
   constructor(
-    readonly sender: SmsSender,
+    private currentSender: SmsSender,
     private readonly options: { retries?: number; retryDelayMs?: number; keep?: number } = {},
   ) {}
 
-  /** Queues a message; returns false when the number is not a valid mobile number. */
-  send(kind: SmsKind, ticketNumber: string, mobile: string | null | undefined, text: string): boolean {
+  get sender(): SmsSender {
+    return this.currentSender;
+  }
+
+  /** Switches the sending method, e.g. after an admin changes the SMS settings. */
+  setSender(sender: SmsSender): void {
+    this.currentSender = sender;
+  }
+
+  /**
+   * Queues a message, or for tap-to-send records it for staff to send. Returns the entry, or null
+   * when the number is not a valid mobile number.
+   */
+  send(kind: SmsKind, ticketNumber: string, mobile: string | null | undefined, text: string): SmsLogEntry | null {
     const to = mobile ? normalizeMobile(mobile) : null;
-    if (!to) return false;
-    const entry: SmsLogEntry = { at: new Date().toISOString(), kind, ticketNumber, to, text, status: 'sending', attempts: 0 };
+    if (!to || this.sender.name === 'off') return null;
+    const entry: SmsLogEntry = {
+      id: randomUUID(),
+      at: new Date().toISOString(),
+      kind,
+      ticketNumber,
+      to,
+      text,
+      status: this.sender.manual ? 'awaiting_tap' : 'sending',
+      attempts: 0,
+    };
     this.log.unshift(entry);
     this.log.splice(this.options.keep ?? 50);
-    void this.deliver(entry);
+    if (!this.sender.manual) void this.deliver(entry);
+    return { ...entry };
+  }
+
+  /** Staff opened a tap-to-send message in their Messages app. */
+  markOpened(id: string): boolean {
+    const entry = this.log.find((e) => e.id === id);
+    if (!entry || !this.sender.manual) return false;
+    entry.status = 'opened';
+    entry.attempts += 1;
     return true;
   }
 

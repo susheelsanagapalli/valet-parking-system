@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
+import { SmsSettingsCard } from '../components/SmsSettingsCard';
 import { useAction, usePolling } from '../hooks';
 import { readAsDataUrl } from '../image';
 import { useSession } from '../session';
@@ -199,6 +200,7 @@ export function SettingsPage() {
         </button>
       </form>
 
+      {can('sms.configure') && <SmsSettingsCard />}
       {can('payment_qr.upload') && <PaymentQrCard locationId={locationId} current={loaded.data?.paymentQr} onSaved={(next) => loaded.setData(next)} />}
       {can('locations.manage') && (
         <NewLocationCard

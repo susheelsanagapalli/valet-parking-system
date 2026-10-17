@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HttpSmsSender, Notifier, SmsGateSender, normalizeMobile, type SmsSender } from '../src/sms.js';
+import { HttpSmsSender, ManualSmsSender, Notifier, SmsGateSender, normalizeMobile, type SmsSender } from '../src/sms.js';
 
 function fakeFetch(status = 200) {
   const calls: Array<{ url: string; init: RequestInit }> = [];
@@ -62,7 +62,7 @@ describe('Notifier', () => {
       },
     };
     const notifier = new Notifier(sender, { retryDelayMs: 1 });
-    expect(notifier.send('ticket_issued', 'T1', '9800000001', 'hello')).toBe(true);
+    expect(notifier.send('ticket_issued', 'T1', '9800000001', 'hello')).toMatchObject({ status: 'sending', to: '+919800000001' });
     await until(() => notifier.recent()[0]?.status === 'sent');
     expect(notifier.recent()[0]).toMatchObject({ status: 'sent', attempts: 3, to: '+919800000001' });
     expect(sent).toEqual(['+919800000001']);
@@ -77,7 +77,16 @@ describe('Notifier', () => {
 
   it('skips invalid numbers', () => {
     const notifier = new Notifier({ name: 'x', send: async () => undefined });
-    expect(notifier.send('receipt', 'T3', '123', 'x')).toBe(false);
+    expect(notifier.send('receipt', 'T3', '123', 'x')).toBeNull();
     expect(notifier.recent()).toHaveLength(0);
+  });
+
+  it('tap-to-send: records the message for staff and never calls a gateway', () => {
+    const notifier = new Notifier(new ManualSmsSender());
+    const entry = notifier.send('ticket_issued', 'T4', '9515858993', 'hello');
+    expect(entry).toMatchObject({ status: 'awaiting_tap', to: '+919515858993', attempts: 0 });
+    expect(notifier.markOpened(entry?.id ?? '')).toBe(true);
+    expect(notifier.recent()[0]).toMatchObject({ status: 'opened', attempts: 1 });
+    expect(notifier.markOpened('nope')).toBe(false);
   });
 });

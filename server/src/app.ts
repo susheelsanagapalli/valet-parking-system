@@ -13,7 +13,8 @@ import {
 } from '@valet/sheets-integration';
 import { authenticate, can, canAccessLocation, requirePermission, toPublicUser, type StaffUser, type UserDirectory } from './auth.js';
 import { checkFileSignature, decodeImage, type PhotoStore } from './photos.js';
-import { SMS_TEXT, type Notifier, type SmsKind } from './sms.js';
+import { SMS_TEXT, normalizeMobile, type Notifier, type SmsDraft, type SmsKind } from './sms.js';
+import { ANDROID_GATEWAY_DOCS, ANDROID_GATEWAY_DOWNLOAD, ANDROID_GATEWAY_RELEASES, SMSGATE_CLOUD_URL, senderFor, toPublic, type SmsSettingsStore } from './smsSettings.js';
 import { guestTicket, staffTicket } from './views.js';
 
 export interface AppDeps {
@@ -31,6 +32,8 @@ export interface AppDeps {
   demo?: { password: string; pins: Map<string, string> };
   /** Guest SMS; when missing, no messages are sent. */
   notifier?: Notifier;
+  /** SMS settings chosen in the admin panel; changing them switches the notifier's sender. */
+  smsSettings?: SmsSettingsStore;
 }
 
 type Handler = (req: Request, res: Response) => unknown | Promise<unknown>;
@@ -140,13 +143,22 @@ export function createApp(deps: AppDeps): express.Express {
   const view = (req: Request, ticket: TicketRow) => staffTicket(repo, repo.getTicketDetails(ticket.id).ticket, user(req), deps.authSecret, now());
   const guestLink = (t: TicketRow) => `${deps.publicBaseUrl}/t/${t.qr_token}`;
 
-  /** Queues a guest SMS for a ticket; returns false when there is no notifier or no valid mobile. */
-  const sms = (kind: SmsKind, ticket: TicketRow, text: (p: { app: string; plate: string; ticket: string; link: string; location: string }) => string): boolean => {
-    if (!deps.notifier) return false;
+  /**
+   * Sends (or, for tap-to-send, prepares) a guest SMS for a ticket. Returns a draft for the staff
+   * member's Messages app in tap-to-send mode, null otherwise; `sent` is false when there is no
+   * notifier or no valid mobile.
+   */
+  const sms = (
+    kind: SmsKind,
+    ticket: TicketRow,
+    text: (p: { app: string; plate: string; ticket: string; link: string; location: string }) => string,
+  ): { sent: boolean; draft: SmsDraft | null } => {
+    if (!deps.notifier) return { sent: false, draft: null };
     const details = repo.getTicketDetails(ticket.id, { showFullMobile: true });
     const location = repo.getLocation(ticket.location_id);
     const p = { app: location.app_name, plate: details.vehicle?.plate_number ?? '', ticket: ticket.ticket_number, link: guestLink(ticket), location: location.name };
-    return deps.notifier.send(kind, ticket.ticket_number, details.customer?.mobile, text(p));
+    const entry = deps.notifier.send(kind, ticket.ticket_number, details.customer?.mobile, text(p));
+    return { sent: entry !== null, draft: entry && deps.notifier.sender.manual ? { id: entry.id, to: entry.to, text: entry.text } : null };
   };
 
   // ------------------------------------------------------------------ public
@@ -422,12 +434,13 @@ export function createApp(deps: AppDeps): express.Express {
       );
       const { ticket, handoverPin } = await repo.checkIn({ ...body, locationId, attendantId: user(req).id, photoStorage: photos.kind });
       deps.demo?.pins.set(ticket.id, handoverPin);
-      const sent = sms('ticket_issued', ticket, (p) => SMS_TEXT.ticketIssued({ ...p, pin: handoverPin }));
+      const { sent, draft } = sms('ticket_issued', ticket, (p) => SMS_TEXT.ticketIssued({ ...p, pin: handoverPin }));
       return {
         ticket: view(req, ticket),
         handoverPin,
         guestLink: guestLink(ticket),
-        sms: !body.guestMobile ? 'no_mobile' : !deps.notifier ? 'not_configured' : sent ? 'sending' : 'invalid_mobile',
+        sms: !body.guestMobile ? 'no_mobile' : !deps.notifier ? 'not_configured' : !sent ? 'invalid_mobile' : draft ? 'tap_to_send' : 'sending',
+        smsDraft: draft,
       };
     }),
   );
@@ -506,8 +519,8 @@ export function createApp(deps: AppDeps): express.Express {
     wrap((req) => {
       const ticket = repo.markReady(ticketFor(req).id, user(req).id);
       const pickup = ticket.pickup_point ?? repo.getSettings(ticket.location_id).pickupPoints[0] ?? 'the pickup point';
-      sms('car_ready', ticket, (p) => SMS_TEXT.carReady({ ...p, pickup }));
-      return view(req, ticket);
+      const { draft } = sms('car_ready', ticket, (p) => SMS_TEXT.carReady({ ...p, pickup }));
+      return { ...view(req, ticket), smsDraft: draft };
     }),
   );
 
@@ -559,8 +572,73 @@ export function createApp(deps: AppDeps): express.Express {
     wrap((req) => {
       const body = parse(z.object({ decision: z.enum(['verified', 'rejected']) }), req.body);
       const payment = repo.verifyPayment(String(req.params.paymentId), body.decision, user(req).id);
-      if (body.decision === 'rejected') sms('payment_rejected', repo.getTicketDetails(payment.ticket_id).ticket, SMS_TEXT.paymentRejected);
-      return payment;
+      const draft = body.decision === 'rejected' ? sms('payment_rejected', repo.getTicketDetails(payment.ticket_id).ticket, SMS_TEXT.paymentRejected).draft : null;
+      return { ...payment, smsDraft: draft };
+    }),
+  );
+
+  const smsSetup = () => ({
+    settings: deps.smsSettings?.get() ? toPublic(deps.smsSettings.get()!) : null,
+    activeMethod: deps.notifier?.sender.name ?? 'off',
+    androidDownload: ANDROID_GATEWAY_DOWNLOAD,
+    androidReleases: ANDROID_GATEWAY_RELEASES,
+    androidDocs: ANDROID_GATEWAY_DOCS,
+    androidCloudUrl: SMSGATE_CLOUD_URL,
+  });
+
+  staff.get('/sms/config', requirePermission('sms.configure'), wrap(() => smsSetup()));
+
+  staff.put(
+    '/sms/config',
+    requirePermission('sms.configure'),
+    wrap((req) => {
+      if (!deps.smsSettings || !deps.notifier) throw new HttpError(409, 'SMS is not available on this server');
+      const body = parse(
+        z.object({
+          phoneType: z.enum(['iphone', 'android']),
+          senderNumber: z.string().min(6).max(20),
+          android: z.object({ url: z.string().max(200).optional(), username: z.string().max(100), password: z.string().max(200).optional() }).optional(),
+        }),
+        req.body,
+      );
+      try {
+        const saved = deps.smsSettings.save({ ...body, android: body.android && { url: body.android.url ?? '', username: body.android.username, password: body.android.password ?? '' } });
+        deps.notifier.setSender(senderFor(saved));
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
+      return smsSetup();
+    }),
+  );
+
+  staff.post(
+    '/sms/test',
+    requirePermission('sms.configure'),
+    wrap(async (req) => {
+      const settings = deps.smsSettings?.get();
+      if (!settings || !deps.notifier) throw new HttpError(409, 'Save the SMS settings first');
+      const body = parse(z.object({ to: z.string().max(20).optional() }), req.body);
+      const to = normalizeMobile(body.to || settings.senderNumber);
+      if (!to) throw new HttpError(400, 'Enter a valid mobile number to send the test to');
+      const text = `Valet test message: guest SMS from ${settings.senderNumber} is working.`;
+      if (settings.phoneType === 'iphone') {
+        const entry = deps.notifier.send('ticket_issued', 'TEST', to, text);
+        return { ok: true, smsDraft: entry && { id: entry.id, to: entry.to, text: entry.text } };
+      }
+      try {
+        await senderFor(settings).send(to, text);
+        return { ok: true, sentTo: to };
+      } catch (e) {
+        return { ok: false, error: (e as Error).message };
+      }
+    }),
+  );
+
+  staff.post(
+    '/sms/:id/opened',
+    wrap((req) => {
+      if (!deps.notifier?.markOpened(String(req.params.id))) throw new HttpError(404, 'Message not found');
+      return { ok: true };
     }),
   );
 
@@ -586,11 +664,12 @@ export function createApp(deps: AppDeps): express.Express {
         throw new HttpError(403, 'Only a supervisor can release a car with a balance due');
       }
       const ticket = repo.handover(t.id, { attendantId: u.id, supervisorApprovalBy: body.approveBalance ? u.id : undefined, endOfStay: body.endOfStay });
+      let draft: SmsDraft | null = null;
       if (ticket.status === 'closed') {
         const amount = repo.paymentsForTicket(ticket.id).filter((p) => p.status === 'verified').reduce((s, p) => s + p.amount, 0);
-        sms('receipt', ticket, (p) => SMS_TEXT.receipt({ ...p, amount }));
+        draft = sms('receipt', ticket, (p) => SMS_TEXT.receipt({ ...p, amount })).draft;
       }
-      return view(req, ticket);
+      return { ...view(req, ticket), smsDraft: draft };
     }),
   );
 
@@ -599,8 +678,8 @@ export function createApp(deps: AppDeps): express.Express {
     requirePermission('tasks.assign'),
     wrap((req) => {
       const ticket = repo.reparkNoShow(ticketFor(req).id, user(req).id);
-      sms('car_reparked', ticket, SMS_TEXT.carReparked);
-      return view(req, ticket);
+      const { draft } = sms('car_reparked', ticket, SMS_TEXT.carReparked);
+      return { ...view(req, ticket), smsDraft: draft };
     }),
   );
   staff.post('/tickets/:ticketId/return', requirePermission('parking.record_spot'), wrap((req) => view(req, repo.returnFromOut(ticketFor(req).id, user(req).id).ticket)));

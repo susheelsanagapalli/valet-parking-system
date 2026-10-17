@@ -14,15 +14,18 @@ export interface Config {
   queuePath: string;
   webDist?: string;
   production: boolean;
+  /** File for the SMS settings chosen in the admin panel; they override SMS_PROVIDER. */
+  smsSettingsPath: string;
   sms:
     | { provider: 'off' }
     | { provider: 'log' }
+    | { provider: 'manual' }
     | { provider: 'smsgate'; url: string; username: string; password: string }
     | { provider: 'httpsms'; apiKey: string; from: string };
 }
 
 function smsConfig(env: Record<string, string | undefined>, production: boolean): Config['sms'] {
-  const provider = env.SMS_PROVIDER ?? (production ? 'off' : 'log');
+  const provider = env.SMS_PROVIDER ?? 'manual';
   const need = (name: string): string => {
     const v = env[name];
     if (!v) throw new Error(`${name} is required when SMS_PROVIDER=${provider}`);
@@ -31,13 +34,14 @@ function smsConfig(env: Record<string, string | undefined>, production: boolean)
   switch (provider) {
     case 'off':
     case 'log':
+    case 'manual':
       return { provider };
     case 'smsgate':
       return { provider, url: env.SMSGATE_URL ?? 'https://api.sms-gate.app/3rdparty/v1/message', username: need('SMSGATE_USERNAME'), password: need('SMSGATE_PASSWORD') };
     case 'httpsms':
       return { provider, apiKey: need('HTTPSMS_API_KEY'), from: need('SMS_FROM') };
     default:
-      throw new Error(`Unknown SMS_PROVIDER "${provider}"; use off, log, smsgate or httpsms`);
+      throw new Error(`Unknown SMS_PROVIDER "${provider}"; use manual, smsgate, httpsms, log or off`);
   }
 }
 
@@ -71,6 +75,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     queuePath: env.QUEUE_PATH ?? 'valet.queue.json',
     webDist: env.WEB_DIST,
     production,
+    smsSettingsPath: env.SMS_SETTINGS_PATH ?? 'sms-settings.json',
     sms: smsConfig(env, production),
   };
 }

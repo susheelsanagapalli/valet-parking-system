@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { api } from '../api';
+import { SendSmsButton, type SmsDraft } from '../components/SendSmsButton';
 import { useAction, usePolling } from '../hooks';
 import { useSession } from '../session';
 import type { PaymentRow, StaffTicket } from '../types';
@@ -9,13 +11,27 @@ export function PaymentsPage() {
   const locationId = location?.id ?? '';
   const { data, error, refresh } = usePolling(() => api<Array<{ payment: PaymentRow; ticket: StaffTicket }>>(`/locations/${locationId}/payments/pending`), [locationId]);
   const action = useAction();
+  const [draft, setDraft] = useState<SmsDraft | null>(null);
   const decide = async (id: string, decision: 'verified' | 'rejected') => {
-    if (await action.run(() => api(`/payments/${id}/verify`, { body: { decision } }))) await refresh();
+    const res = await action.run(() => api<{ smsDraft?: SmsDraft | null }>(`/payments/${id}/verify`, { body: { decision } }));
+    if (res) {
+      setDraft(res.smsDraft ?? null);
+      await refresh();
+    }
   };
 
   return (
     <div className="card">
       <h1>QR payments to verify</h1>
+      {draft && (
+        <div className="card stack">
+          <strong>Tell the guest the payment was not found</strong>
+          <SendSmsButton draft={draft} />
+          <button type="button" onClick={() => setDraft(null)}>
+            Done
+          </button>
+        </div>
+      )}
       <p className="muted">Check each payment in your bank or UPI app: the amount and transaction reference must match.</p>
       {(error || action.error) && <div className="notice error">{error ?? action.error}</div>}
       {data?.length === 0 && <p className="muted">Nothing waiting.</p>}

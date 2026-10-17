@@ -4,12 +4,14 @@ import { useAction } from '../hooks';
 import { useSession } from '../session';
 import type { LocationSettings, StaffTicket } from '../types';
 import { QrScanner, canScanQr } from './QrScanner';
+import type { SmsDraft } from './SendSmsButton';
 import { SignaturePad } from './SignaturePad';
 
 interface Props {
   ticket: StaffTicket;
   settings: LocationSettings;
-  onChanged: () => void;
+  /** Called after each change; after handover it receives the server response (with any SMS draft). */
+  onChanged: (handoverResult?: { smsDraft?: SmsDraft | null }) => void;
 }
 
 /** Verify the guest, settle payment, record the guest's confirmation and hand over (FR-OUT-06, FR-OUT-13, FR-PAY-04, FR-PAY-14). */
@@ -63,7 +65,10 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
   }
 
   async function handover() {
-    if (await run(() => api(`/tickets/${ticket.id}/handover`, { body: { approveBalance: approveBalance || undefined, endOfStay: endOfStay || undefined } }))) onChanged();
+    const res = await run(() =>
+      api<{ smsDraft?: SmsDraft | null }>(`/tickets/${ticket.id}/handover`, { body: { approveBalance: approveBalance || undefined, endOfStay: endOfStay || undefined } }),
+    );
+    if (res) onChanged(res);
   }
 
   return (

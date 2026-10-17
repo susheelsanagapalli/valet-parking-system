@@ -2,6 +2,7 @@ import QRCode from 'qrcode';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { PhotoPicker } from '../components/PhotoPicker';
+import { SendSmsButton, type SmsDraft } from '../components/SendSmsButton';
 import { SpotForm } from '../components/SpotForm';
 import { spotDescription } from '../components/TicketSummary';
 import { useAction, usePolling } from '../hooks';
@@ -12,7 +13,8 @@ interface CheckInResult {
   ticket: StaffTicket;
   handoverPin: string;
   guestLink: string;
-  sms: 'sending' | 'not_configured' | 'invalid_mobile' | 'no_mobile';
+  sms: 'sending' | 'tap_to_send' | 'not_configured' | 'invalid_mobile' | 'no_mobile';
+  smsDraft: SmsDraft | null;
 }
 
 const EMPTY = { plateNumber: '', keyTag: '', guestMobile: '', guestName: '', make: '', model: '', colour: '', stayEndDate: '' };
@@ -74,6 +76,7 @@ export function CheckInPage() {
             </a>
           </p>
           {result.sms === 'sending' && <div className="notice ok">Ticket link and PIN sent to the guest by SMS.</div>}
+          {result.smsDraft && <SendSmsButton draft={result.smsDraft} label="Send ticket SMS" />}
           {result.sms === 'not_configured' && <div className="notice warn">SMS is switched off. Let the guest scan the QR or print the ticket.</div>}
           {result.sms === 'invalid_mobile' && <div className="notice warn">The mobile number looks wrong, so no SMS was sent. Let the guest scan the QR.</div>}
           {result.sms === 'no_mobile' && <div className="notice warn">No mobile number: print the ticket for the guest.</div>}
