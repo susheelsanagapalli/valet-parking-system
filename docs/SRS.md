@@ -1,6 +1,6 @@
 # Software Requirements Specification: Valet Parking System
 
-Version 1.4 · Oct 17, 2026 · Manikanta
+Version 1.5 · Oct 17, 2026 · Manikanta
 
 ## Table of contents
 
@@ -22,6 +22,7 @@ Version 1.4 · Oct 17, 2026 · Manikanta
 | 1.2 | Oct 17, 2026 | Configurable service profiles (paid parking, restaurant, hotel, event venue, custom) with a settings catalogue managed from the admin panel. Data stored in each operator's own Google Drive and Google Sheets instead of a separate database; scale, performance, availability and recovery targets revised to fit. 18 new functional requirements (89 total). |
 | 1.3 | Oct 17, 2026 | Vehicle photos made optional and configurable per vendor. Parking spot entered as free text by default, with zone/slot list as an option. Photo storage made a separate, selectable integration (Google Drive by default); records stay in Google Sheets. Photos deleted automatically when the guest link expires after handover. Guest no-damage confirmation required at handover. 4 new functional requirements (93 total). |
 | 1.4 | Oct 17, 2026 | Parking spot capture configurable per client: text, landmark text with GPS location, photo with text, or zone/slot list. White-label branding with a custom app name per client. Settings levels (platform, operator, location). Google Drive integration configurable per client. Master admin panel and permission-based roles, including custom roles assigned per location. 18 new functional requirements (111 total). |
+| 1.5 | Oct 17, 2026 | Parking spot text field, GPS location and spot photo each switchable to off, optional or required per location, independently of each other, with the zone/slot list as a separate switch; rules so a spot is never saved empty. 1 new functional requirement (112 total). |
 
 ## 1. Introduction
 
@@ -211,10 +212,10 @@ Every location chooses a service profile when it is created. The profile fills i
 
 | Setting | Options | Default | Related FRs |
 | --- | --- | --- | --- |
-| Parking spot entry | Free text, zone/slot list | Free text | FR-PARK-02 |
-| Parking spot text label | Any label (e.g. "Landmark", "Spot", "Bay") | "Parking spot / landmark" | FR-PARK-02 |
-| Parking spot GPS location | Off, on; minimum accuracy in metres | Off; 20 m | FR-PARK-08, FR-PARK-09 |
-| Parking spot photo | Off, optional, required | Off | FR-PARK-10 |
+| Parking spot text field | Off, optional, required; field label (e.g. "Landmark", "Spot", "Bay") | Required; "Parking spot / landmark" | FR-PARK-02, FR-PARK-11 |
+| Parking spot GPS location | Off, optional, required; minimum accuracy in metres | Off; 20 m | FR-PARK-08, FR-PARK-09, FR-PARK-11 |
+| Parking spot photo | Off, optional, required | Off | FR-PARK-10, FR-PARK-11 |
+| Zone/slot list | Off, on | Off | FR-PARK-01 to FR-PARK-06 |
 | Vehicle photos | Off, optional, required; number of photos (1–8) | Optional; 4 | FR-IN-03, FR-OUT-07 |
 | Photo storage | Google Drive, S3-compatible object storage | Google Drive | FR-DATA-07 |
 | Handover confirmation | On, off | On | FR-OUT-13, FR-OUT-14 |
@@ -239,16 +240,22 @@ Every location chooses a service profile when it is created. The profile fills i
 | Languages | English plus selected regional languages | English | FR-ADM-09 |
 | Message templates | Per message type and language | Standard templates | FR-NOT-03 |
 
-The three parking spot settings combine into the common capture methods:
+The text field, GPS location and spot photo are switched independently; each can be off, optional (the attendant may skip it) or required (the spot cannot be saved without it). Together with the zone/slot list they give the common capture methods:
 
-| Capture method | Parking spot entry | GPS location | Spot photo |
-| --- | --- | --- | --- |
-| Text only | Free text | Off | Off |
-| Landmark + GPS location | Free text (labelled "Landmark") | On | Off |
-| Photo + text | Free text | Off | Optional or required |
-| Zone / slot | Zone/slot list | Off | Off |
+| Capture method | Text field | GPS location | Spot photo | Zone/slot list |
+| --- | --- | --- | --- | --- |
+| Text only | Required | Off | Off | Off |
+| Landmark + GPS location | Required (labelled "Landmark") | Required | Off | Off |
+| Photo + text | Required | Off | Optional or required | Off |
+| GPS only | Off | Required | Off | Off |
+| Photo only | Off | Off | Required | Off |
+| Zone / slot | Off or optional | Off | Off | On |
 
-Any other combination (e.g. landmark + GPS + photo) is also allowed.
+Any other combination is also allowed, subject to these rules (FR-PARK-11):
+
+- At least one of the four must be on; the admin panel does not allow turning all of them off.
+- If all items that are on are optional, the attendant must still record at least one of them.
+- If GPS is on but no position of the required accuracy is available (e.g. in a basement), the attendant must use the text field instead, even if the text field is off (FR-PARK-08).
 
 #### 2.7.2 Service profiles
 
@@ -331,7 +338,7 @@ No role can be granted permission to view handover PINs (NFR-PRIV-01).
 
 ## 3. Functional requirements
 
-VPS has 111 functional requirements across twelve modules; priorities use MoSCoW (Must, Should, Could), and every Must item is required for v1.0 acceptance. Where a requirement depends on a setting, it applies only when that setting is on for the location. Requirements that name a role mean any user whose role holds the matching permission (section 2.9).
+VPS has 112 functional requirements across twelve modules; priorities use MoSCoW (Must, Should, Could), and every Must item is required for v1.0 acceptance. Where a requirement depends on a setting, it applies only when that setting is on for the location. Requirements that name a role mean any user whose role holds the matching permission (section 2.9).
 
 ### 3.1 Authentication and user management
 
@@ -365,15 +372,16 @@ VPS has 111 functional requirements across twelve modules; priorities use MoSCoW
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | FR-PARK-01 | In zone/slot mode, admins shall define zones and numbered slots per location, with capacity. | Must |
-| FR-PARK-02 | The attendant shall record where the vehicle is parked using the location's capture method (section 2.7.1): a text field with the configured label (default), together with GPS location and/or a spot photo where those are on, or a zone and slot in zone/slot mode. | Must |
+| FR-PARK-02 | The attendant shall record where the vehicle is parked using the items switched on for the location (section 2.7.1): a text field with the configured label, GPS location, a spot photo and/or a zone and slot from the list. Required items must be completed; optional items may be skipped. | Must |
 | FR-PARK-03 | In zone/slot mode, the system shall suggest the nearest free slot based on current occupancy. | Should |
 | FR-PARK-04 | In zone/slot mode, the system shall prevent assigning a slot that is already occupied; conflicts from slots assigned offline shall be detected on sync and flagged to the supervisor. | Must |
 | FR-PARK-05 | Attendants shall move a vehicle and update its parking spot using the same capture method; the move shall be logged. | Must |
 | FR-PARK-06 | In zone/slot mode, the system shall alert the supervisor when a location reaches its occupancy alert level (default 90%). | Should |
 | FR-PARK-07 | At check-in the system shall create a park task assigned to the checking-in attendant and close it when the parking spot is recorded. | Must |
-| FR-PARK-08 | Where GPS location is on, the attendant app shall capture the phone's GPS position and accuracy when the parking spot is saved. If the accuracy is worse than the configured minimum (default 20 m) or no position is available (e.g. a basement), the app shall tell the attendant and make the landmark text required. | Must |
+| FR-PARK-08 | Where GPS location is optional or required, the attendant app shall capture the phone's GPS position and accuracy when the parking spot is saved. If the accuracy is worse than the configured minimum (default 20 m) or no position is available (e.g. a basement), the app shall tell the attendant and require the text field instead, showing it even if it is switched off. | Must |
 | FR-PARK-09 | Where a GPS location was captured, the retrieving attendant shall see the parked car as a pin on a map, with walking directions from their current position. | Should |
 | FR-PARK-10 | Where spot photo is on, the attendant shall take a photo of the parked car in its spot (optional or required per setting); the photo is deleted per FR-DATA-08. | Must |
+| FR-PARK-11 | Users with the edit location settings permission shall set each of the parking spot text field, GPS location and spot photo to off, optional or required, and turn the zone/slot list on or off, per location. The admin panel shall not allow all four to be off, and the attendant app shall not save a parking spot with nothing recorded. | Must |
 
 ### 3.4 Vehicle retrieval (pickup request)
 
@@ -465,7 +473,7 @@ VPS has 111 functional requirements across twelve modules; priorities use MoSCoW
 | FR-CFG-01 | When creating a location, admins shall choose a service profile (Paid parking, Restaurant, Hotel, Event venue, Custom), which fills in the default settings in section 2.7.2. | Must |
 | FR-CFG-02 | Operator admins shall change any setting in the settings catalogue (section 2.7.1) from the admin panel, taking effect without a code change or redeployment. | Must |
 | FR-CFG-03 | Operator admins shall define custom check-in fields per location (label, type text/number/list, required or optional, shown on ticket and reports). | Should |
-| FR-CFG-04 | Operator admins shall turn optional features on or off per location: vehicle photos, parking spot GPS, parking spot photo, handover confirmation, online payment, tips, ratings, scheduled pickup, merchant validation, merchant car requests, damage diagram, auto-dispatch. | Must |
+| FR-CFG-04 | Operator admins shall turn optional features on or off per location: vehicle photos, parking spot text field, GPS and photo (each off, optional or required), zone/slot list, handover confirmation, online payment, tips, ratings, scheduled pickup, merchant validation, merchant car requests, damage diagram, auto-dispatch. | Must |
 | FR-CFG-05 | Operator admins shall set branding for the operator, with location overrides where section 2.8 allows: logo, app icon, colours, ticket header and footer text, terms and conditions, SMS sender ID and email sender name. | Must |
 | FR-CFG-06 | Settings changes shall be versioned and logged in the audit trail; each ticket records the settings version in force at check-in and keeps those rules until it ends. | Must |
 | FR-CFG-07 | Operator admins shall save a location's settings as a named custom profile and apply it to other locations. | Could |
@@ -576,7 +584,7 @@ The targets below are measurable acceptance criteria. They are sized for Google 
 | NFR-PRIV-01 | Privacy | Guest mobile numbers shall be masked (last 4 digits) for users without the view full guest mobile number permission. Handover PINs shall never be shown to any role. |
 | NFR-PRIV-02 | Privacy | Photos and GPS locations shall be deleted per FR-DATA-08. After a configurable retention period (default 90 days), the guest's name, mobile number, plate number and handover signature shall be removed by deleting the whole monthly Guest data spreadsheet and signature files (section 6.4), since Sheets version history would keep values that were only overwritten. Financial and audit fields are kept per section 6.3; records linked to an open incident are kept until it closes. |
 | NFR-PRIV-03 | Privacy | Customer and vehicle records shall belong to a single operator, be stored only in that operator's own Google account, or its own dedicated folder in a platform-managed account, and photo storage, and never be visible to or matched across other operators. |
-| NFR-USE-01 | Usability | An attendant shall complete a check-in with the required fields (plate number, key tag, parking spot text, and GPS where on) in under 30 seconds, or under 60 seconds where vehicle or spot photos are required; optional fields, custom fields and the damage diagram are excluded from these targets. |
+| NFR-USE-01 | Usability | An attendant shall complete a check-in with the required fields (plate number, key tag, and the parking spot items set as required, excluding photos) in under 30 seconds, or under 60 seconds where vehicle or spot photos are required; optional fields, custom fields and the damage diagram are excluded from these targets. |
 | NFR-USE-02 | Usability | A new attendant shall be productive after 30 minutes of training. |
 | NFR-USE-03 | Usability | An operator admin shall set up a new location from a service profile, including tariffs, in under 30 minutes without vendor help; setting up branding, app name, the Google Drive integration and roles for a new operator shall take under 1 hour. |
 | NFR-USE-04 | Usability | A guest shall complete the handover confirmation in under 10 seconds. |
@@ -708,8 +716,8 @@ Six use cases cover the core guest journey, client setup and role management; ea
   2. Attendant enters the plate number and, if given, the guest mobile number, vehicle details and the location's custom fields (FR-IN-01, FR-CFG-03).
   3. Where photos are on, attendant captures the vehicle photos; where the damage diagram is on, notes damage (FR-IN-03, FR-IN-04).
   4. Attendant records key tag; system issues ticket and sends the link and handover PIN (FR-IN-05, FR-IN-02).
-  5. Attendant parks the car and records the parking spot by the location's method: types the landmark or spot, and the app captures GPS and/or a spot photo where on, or the attendant picks zone and slot. The park task closes (FR-PARK-02, FR-PARK-08, FR-PARK-10, FR-PARK-07).
-- **Exceptions:** No network → ticket issued from the device's reserved number block, printed, and synced on reconnect; the SMS is sent after sync (FR-IN-10, FR-IN-06, NFR-AVL-02). Guest declines to give a number → printed ticket only; the guest later requests the car at the valet desk (FR-OUT-03). GPS weak or unavailable (e.g. basement) → landmark text becomes required (FR-PARK-08). Slot conflict found on sync (zone/slot mode) → supervisor alerted (FR-PARK-04). Prepaid location → guest pays at check-in (FR-PAY-10).
+  5. Attendant parks the car and records the parking spot with the items switched on for the location: types the landmark or spot, captures GPS, takes a spot photo, and/or picks zone and slot, completing every required item. The park task closes (FR-PARK-02, FR-PARK-08, FR-PARK-10, FR-PARK-11, FR-PARK-07).
+- **Exceptions:** No network → ticket issued from the device's reserved number block, printed, and synced on reconnect; the SMS is sent after sync (FR-IN-10, FR-IN-06, NFR-AVL-02). Guest declines to give a number → printed ticket only; the guest later requests the car at the valet desk (FR-OUT-03). GPS weak or unavailable (e.g. basement) → text field shown and required instead (FR-PARK-08). Slot conflict found on sync (zone/slot mode) → supervisor alerted (FR-PARK-04). Prepaid location → guest pays at check-in (FR-PAY-10).
 - **Postcondition:** Ticket in state Parked; parking spot recorded.
 
 ### UC-02 Request vehicle

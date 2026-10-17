@@ -10,7 +10,7 @@ This repository currently holds the project's requirements. Source code will be 
 
 | Document | Description |
 | --- | --- |
-| [Software Requirements Specification](docs/SRS.md) | Functional and non-functional requirements for v1.0, document version 1.4 (IEEE 830 / ISO/IEC/IEEE 29148 structure) |
+| [Software Requirements Specification](docs/SRS.md) | Functional and non-functional requirements for v1.0, document version 1.5 (IEEE 830 / ISO/IEC/IEEE 29148 structure) |
 
 ## System at a glance
 
@@ -28,7 +28,7 @@ This repository currently holds the project's requirements. Source code will be 
 
 - White-label branding: each client sets its own app name, logo, colours and message sender name
 - Service profiles (Paid parking, Restaurant, Hotel, Event venue, Custom) with settings at platform, client and location level
-- Parking spot capture chosen per client: text, landmark + GPS location, photo + text, or zone/slot
+- Parking spot capture chosen per location: text field, GPS location and spot photo each off, optional or required, plus an optional zone/slot list
 - Master admin panel and permission-based roles, with custom roles assigned per location
 - Digital ticket with QR code, sent by SMS/WhatsApp at drop-off, or a printed ticket
 - Vehicle check-in with key tag, custom fields and optional photos
@@ -41,4 +41,4 @@ This repository currently holds the project's requirements. Source code will be 
 
 ## Status
 
-Requirements baseline: **SRS v1.4** (October 2026). Open questions are listed in [section 8 of the SRS](docs/SRS.md#8-open-questions).
+Requirements baseline: **SRS v1.5** (October 2026). Open questions are listed in [section 8 of the SRS](docs/SRS.md#8-open-questions).
