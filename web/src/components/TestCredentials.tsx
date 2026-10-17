@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { IS_BROWSER_DEMO, api, setToken } from '../api';
 import { STATUS_LABEL, type TicketStatus } from '../types';
 
 interface DemoCredentials {
@@ -113,7 +113,23 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
       <h2 id="test-credentials">Test credentials</h2>
       <div className="notice warn">{data.notice}</div>
 
-      <PhoneHttpsHelp />
+      {IS_BROWSER_DEMO ? (
+        <button
+          type="button"
+          onClick={() => {
+            if (!window.confirm('Delete all demo data on this device and start again with the sample cars?')) return;
+            void import('../demo/demoServer').then(({ resetDemoData }) => {
+              resetDemoData();
+              setToken(null);
+              window.location.reload();
+            });
+          }}
+        >
+          Reset demo data
+        </button>
+      ) : (
+        <PhoneHttpsHelp />
+      )}
 
       <h3>Staff</h3>
       <p className="muted" style={{ margin: 0 }}>
@@ -142,7 +158,9 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
         </button>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Guests don't sign in: open a ticket link, ideally in a private window or on your phone. The PIN is what the guest tells the attendant at handover.
+        {IS_BROWSER_DEMO
+          ? 'Guests don’t sign in: open a ticket link in another tab of this same browser (a private window or another phone has its own separate demo data). The PIN is what the guest tells the attendant at handover.'
+          : 'Guests don’t sign in: open a ticket link, ideally in a private window or on your phone. The PIN is what the guest tells the attendant at handover.'}
       </p>
       {data.guestTickets.length === 0 && <p className="muted">No open tickets. Check in a car as an attendant to create one.</p>}
       <div>

@@ -2,59 +2,9 @@ import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { readFileSync } from 'node:fs';
 import type { NextFunction, Request, Response } from 'express';
 
-/** Permission catalogue (subset of SRS 2.9.1 used by this server). */
-export const PERMISSIONS = [
-  'tickets.check_in',
-  'tickets.view',
-  'tickets.request_car',
-  'parking.record_spot',
-  'tasks.accept',
-  'tasks.assign',
-  'handover.hand_over',
-  'handover.approve_balance',
-  'payments.record',
-  'payments.verify',
-  'incidents.report',
-  'reports.view',
-  'guest.view_full_mobile',
-  'locations.manage',
-  'locations.settings',
-  'payment_qr.upload',
-  'payment_qr.approve',
-  'sms.configure',
-  'data.manage',
-] as const;
-export type Permission = (typeof PERMISSIONS)[number];
+import { can, type Permission, type StaffUser, type UserAuth } from './permissions.js';
 
-export const ROLES = ['platform_admin', 'operator_admin', 'location_manager', 'supervisor', 'attendant', 'merchant_validator'] as const;
-export type Role = (typeof ROLES)[number];
-
-const ATTENDANT: Permission[] = ['tickets.check_in', 'tickets.view', 'tickets.request_car', 'parking.record_spot', 'tasks.accept', 'handover.hand_over', 'payments.record', 'incidents.report'];
-const SUPERVISOR: Permission[] = [...ATTENDANT, 'tasks.assign', 'handover.approve_balance', 'payments.verify', 'guest.view_full_mobile', 'reports.view'];
-const MANAGER: Permission[] = [...SUPERVISOR, 'locations.settings', 'payment_qr.upload'];
-const OPERATOR_ADMIN: Permission[] = [...MANAGER, 'locations.manage', 'sms.configure', 'data.manage'];
-
-/** Built-in roles (SRS 2.9.2). Nobody can see handover PINs, so there is no permission for it. */
-export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  platform_admin: PERMISSIONS,
-  operator_admin: OPERATOR_ADMIN,
-  location_manager: MANAGER,
-  supervisor: SUPERVISOR,
-  attendant: ATTENDANT,
-  merchant_validator: ['tickets.view', 'tickets.request_car'],
-};
-
-export interface StaffUser {
-  id: string;
-  username: string;
-  name: string;
-  role: Role;
-  /** Location ids the user works at, or "all". */
-  locations: string[] | 'all';
-  passwordHash: string;
-}
-
-export type PublicUser = Omit<StaffUser, 'passwordHash'> & { permissions: readonly Permission[] };
+export * from './permissions.js';
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString('hex');
@@ -69,25 +19,15 @@ export function checkPassword(password: string, stored: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-export function toPublicUser(u: StaffUser): PublicUser {
-  const { passwordHash: _omit, ...rest } = u;
-  return { ...rest, permissions: ROLE_PERMISSIONS[u.role] };
-}
 
-export function can(user: StaffUser, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[user.role].includes(permission);
-}
 
-export function canAccessLocation(user: StaffUser, locationId: string): boolean {
-  return user.locations === 'all' || user.locations.includes(locationId);
-}
 
 const LOCK_AFTER = 5;
 const LOCK_MS = 15 * 60_000;
 const TOKEN_TTL_MS = 12 * 60 * 60_000;
 
 /** Staff accounts, sign-in with lockout (NFR-SEC-03) and signed session tokens. */
-export class UserDirectory {
+export class UserDirectory implements UserAuth {
   private readonly users = new Map<string, StaffUser>();
   private readonly failures = new Map<string, { count: number; lockedUntil: number }>();
 
@@ -159,7 +99,7 @@ declare global {
   }
 }
 
-export function authenticate(directory: UserDirectory) {
+export function authenticate(directory: UserAuth) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const header = req.header('authorization') ?? '';
     const user = header.startsWith('Bearer ') ? directory.verify(header.slice(7)) : undefined;

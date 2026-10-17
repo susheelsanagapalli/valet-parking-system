@@ -1,6 +1,5 @@
 import type { LocationSettings, TicketRow, ValetSheetsRepository } from '@valet/sheets-integration';
-import { can, type StaffUser } from './auth.js';
-import { signFileUrl } from './photos.js';
+import { can, type StaffUser } from './permissions.js';
 
 const ACTIVE_RETRIEVAL = ['retrieval_requested', 'assigned_in_transit'];
 
@@ -15,7 +14,7 @@ export function etaMinutes(repo: ValetSheetsRepository, ticket: TicketRow, now: 
 }
 
 /** Ticket as staff see it: no PIN hash or QR token, mobile masked unless allowed (NFR-PRIV-01). */
-export function staffTicket(repo: ValetSheetsRepository, ticket: TicketRow, user: StaffUser, secret: string, now: Date) {
+export function staffTicket(repo: ValetSheetsRepository, ticket: TicketRow, user: StaffUser, photoUrl: (ref: string) => string, now: Date) {
   const details = repo.getTicketDetails(ticket.id, { showFullMobile: can(user, 'guest.view_full_mobile') });
   const { handover_pin_hash: _pin, qr_token: _qr, ...rest } = details.ticket;
   return {
@@ -29,7 +28,7 @@ export function staffTicket(repo: ValetSheetsRepository, ticket: TicketRow, user
     balance_due: details.balanceDue,
     eta_minutes: etaMinutes(repo, ticket, now),
     confirmation: repo.currentConfirmation(ticket.id) ?? null,
-    photos: repo.photosForTicket(ticket.id).map((p) => ({ id: p.id, type: p.type, url: signFileUrl(secret, p.file_ref) })),
+    photos: repo.photosForTicket(ticket.id).map((p) => ({ id: p.id, type: p.type, url: photoUrl(p.file_ref) })),
     payments: repo.paymentsForTicket(ticket.id),
   };
 }

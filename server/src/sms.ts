@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 /**
  * Guest SMS (SRS FR-NOT-01, FR-NOT-04, FR-NOT-05).
  *
@@ -68,7 +66,7 @@ export class SmsGateSender implements SmsSender {
   constructor(private readonly options: { url: string; username: string; password: string; fetchImpl?: typeof fetch }) {}
 
   async send(to: string, text: string): Promise<void> {
-    const auth = Buffer.from(`${this.options.username}:${this.options.password}`).toString('base64');
+    const auth = btoa(`${this.options.username}:${this.options.password}`);
     const res = await (this.options.fetchImpl ?? fetch)(this.options.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Basic ${auth}` },
@@ -144,7 +142,7 @@ export class Notifier {
     const to = mobile ? normalizeMobile(mobile) : null;
     if (!to || this.sender.name === 'off') return null;
     const entry: SmsLogEntry = {
-      id: randomUUID(),
+      id: globalThis.crypto.randomUUID(),
       at: new Date().toISOString(),
       kind,
       ticketNumber,

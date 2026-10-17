@@ -1,4 +1,11 @@
-import { createHmac, randomBytes, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, randomInt, randomUUID } from 'node:crypto';
+
+/** Compares two strings in time independent of where they differ (no Buffer, so it also runs in browsers). */
+function constantTimeEqual(a: string, b: string): boolean {
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
 
 export function newId(): string {
   return randomUUID();
@@ -24,15 +31,11 @@ export function hashPin(secret: string, ticketId: string, pin: string): string {
 }
 
 export function verifyPin(secret: string, ticketId: string, pin: string, expectedHash: string): boolean {
-  const actual = Buffer.from(hashPin(secret, ticketId, pin), 'hex');
-  const expected = Buffer.from(expectedHash, 'hex');
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  return constantTimeEqual(hashPin(secret, ticketId, pin), expectedHash);
 }
 
 export function safeEqual(a: string, b: string): boolean {
-  const x = Buffer.from(a);
-  const y = Buffer.from(b);
-  return x.length === y.length && timingSafeEqual(x, y);
+  return constantTimeEqual(a, b);
 }
 
 /** Shows only the last 4 digits of a mobile number (NFR-PRIV-01). */

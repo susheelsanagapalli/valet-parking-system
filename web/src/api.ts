@@ -7,8 +7,11 @@ const TOKEN_KEY = 'valet.token';
  */
 export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 
-/** Preview build without a server (GitHub Pages): the screens load, but nothing can be saved. */
-export const IS_PREVIEW_WITHOUT_SERVER = import.meta.env.VITE_PREVIEW === 'true' && API_BASE === '';
+/**
+ * GitHub Pages build without a server address: the Valet server runs inside the browser
+ * (demo/demoServer.ts), with data kept on this device only.
+ */
+export const IS_BROWSER_DEMO = import.meta.env.VITE_PREVIEW === 'true' && API_BASE === '';
 
 /** Turns a server path such as /api/files?... into a full address. */
 export function apiUrl(path: string): string {
@@ -48,22 +51,29 @@ export function setUnauthorizedHandler(fn: () => void): void {
 }
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown; auth?: boolean } = {}): Promise<T> {
-  if (IS_PREVIEW_WITHOUT_SERVER) {
-    throw new ApiError(503, 'This GitHub Pages preview has no Valet server behind it, so it cannot sign in or save data.');
-  }
-  const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  const method = options.method ?? (options.body === undefined ? 'GET' : 'POST');
   const token = options.auth === false ? null : getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/api${path}`, {
-    method: options.method ?? (options.body === undefined ? 'GET' : 'POST'),
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
-  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-  if (!res.ok) {
-    if (res.status === 401 && options.auth !== false) onUnauthorized?.();
-    throw new ApiError(res.status, data.error ?? `Request failed (${res.status})`, data.code);
+  let status: number;
+  let data: { error?: string; code?: string };
+
+  if (IS_BROWSER_DEMO) {
+    // Same routes as the real server, running in this browser (loaded only in the Pages demo build).
+    const { demoRequest } = await import('./demo/demoServer');
+    const res = await demoRequest(method, path, options.body, token);
+    status = res.status;
+    data = structuredClone(res.body) as typeof data;
+  } else {
+    const headers: Record<string, string> = {};
+    if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_BASE}/api${path}`, { method, headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) });
+    status = res.status;
+    data = (await res.json().catch(() => ({}))) as typeof data;
+  }
+
+  if (status >= 400) {
+    if (status === 401 && options.auth !== false) onUnauthorized?.();
+    throw new ApiError(status, data.error ?? `Request failed (${status})`, data.code);
   }
   return data as T;
 }

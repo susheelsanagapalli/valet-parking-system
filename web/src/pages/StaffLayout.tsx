@@ -1,4 +1,5 @@
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
+import { IS_BROWSER_DEMO } from '../api';
 import { useSession } from '../session';
 
 const TABS: Array<{ to: string; label: string; permission: string }> = [
@@ -36,7 +37,7 @@ export function StaffLayout() {
         </button>
       </header>
       <nav className="tabs">
-        {TABS.filter((t) => can(t.permission)).map((t) => (
+        {TABS.filter((t) => can(t.permission) && !(IS_BROWSER_DEMO && t.to === 'data')).map((t) => (
           <NavLink key={t.to} to={t.to} className={({ isActive }) => (isActive ? 'active' : '')}>
             {t.label}
           </NavLink>

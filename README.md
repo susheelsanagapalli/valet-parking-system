@@ -53,6 +53,14 @@ Phones only allow GPS and the live camera on secure (https) pages. Besides `http
 npm test             # data layer and API tests
 ```
 
+## Live demo on GitHub Pages
+
+**https://susheelsanagapalli.github.io/valet-parking-system/** is published by `.github/workflows/pages.yml` on every push to `main` (after the tests pass).
+
+GitHub Pages cannot run a server, so the Pages build runs the Valet server's own route code (`server/src/api.ts`) and data layer inside the browser. Everything works there: test logins on the sign-in page, check-in, parking spot with GPS, the queue, guest page, QR payments, handover, settings and tap-to-send SMS. The data is kept in that browser only (so open guest links in another tab of the same browser), and **Reset demo data** starts again. Google Sheets is not available in the Pages demo.
+
+To use the Pages site with a real server and shared data instead, set the repository variable `VALET_API_URL` to the server's https address and `CORS_ORIGINS=https://susheelsanagapalli.github.io` on the server.
+
 ## Deploy to Render with GitHub Actions
 
 Every push to `main` runs the tests and build (`.github/workflows/ci.yml`); if they pass, `.github/workflows/deploy.yml` deploys that commit to [Render](https://render.com) and waits until it is live. Pull requests only run the tests.
