@@ -53,6 +53,28 @@ Phones only allow GPS and the live camera on secure (https) pages. Besides `http
 npm test             # data layer and API tests
 ```
 
+## Deploy to Render with GitHub Actions
+
+Every push to `main` runs the tests and build (`.github/workflows/ci.yml`); if they pass, `.github/workflows/deploy.yml` deploys that commit to [Render](https://render.com) and waits until it is live. Pull requests only run the tests.
+
+One-time setup:
+
+1. Sign up at https://render.com with GitHub and allow access to this repository.
+2. **New → Blueprint**, choose this repository and click **Apply**. Render reads `render.yaml` and creates the `valet-parking` web service (Singapore, free plan, random `AUTH_SECRET` and `PIN_HMAC_SECRET`).
+3. In the service, open **Settings → Deploy Hook** and copy the URL.
+4. In GitHub, add it as a secret and the service address as a variable:
+   ```bash
+   gh secret set RENDER_DEPLOY_HOOK_URL      # paste the Deploy Hook URL
+   gh variable set RENDER_SERVICE_URL --body "https://valet-parking.onrender.com"   # your service URL
+   ```
+5. Push to `main` (or run **Deploy to Render** from the Actions tab).
+
+The deployed site has a real https address, so GPS, the live QR camera and Google sign-in work on phones with nothing to install. For Google Sheets, add `https://<your-service>.onrender.com/api/google/callback` as an authorised redirect URI on the Google OAuth client, then connect on the site's **Data** page.
+
+The free plan sleeps after 15 minutes without visits (the first visit then takes about a minute) and forgets saved settings on every deploy, including the Google connection. To keep them, switch to the Starter plan, add a disk mounted at `/var/data`, and set `DATA_DIR=/var/data`.
+
+Until go-live the site runs in demo mode, so the sign-in page shows the test logins to anyone with the link. Don't connect real guest data while demo mode is on. At go-live set `NODE_ENV=production`, `SEED_DEMO=false` and real staff accounts (`STAFF_USERS_FILE`).
+
 ## Guest SMS from your own number (free)
 
 Guests get an SMS with their ticket link and handover PIN at check-in, then "car ready", "parked again" (no-show), a receipt when the ticket closes, and a notice if a QR payment can't be found. Messages are sent from **your own mobile number** by an Android phone with that SIM, using a free gateway app. No paid SMS provider is needed.

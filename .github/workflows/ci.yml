@@ -1,10 +1,10 @@
 name: CI
 
+# Pushes to main run this through deploy.yml; pull requests run it on its own.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read

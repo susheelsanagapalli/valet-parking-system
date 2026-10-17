@@ -25,6 +25,8 @@ export interface AppDeps {
   publicBaseUrl: string;
   webDist?: string;
   now?: () => Date;
+  /** Git commit being run, shown by /api/health. */
+  commit?: string;
   /**
    * Demo mode only: the shared demo password and the handover PIN of each ticket checked in since
    * start-up, so testers find every credential on the sign-in page. Never set in production.
@@ -170,7 +172,7 @@ export function createApp(deps: AppDeps): express.Express {
   // ------------------------------------------------------------------ public
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, pendingWrites: repo.queue.pending });
+    res.json({ ok: true, commit: deps.commit ?? null, pendingWrites: repo.queue.pending });
   });
 
   if (deps.devCertDer) {

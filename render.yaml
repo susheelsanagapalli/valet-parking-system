@@ -1,0 +1,31 @@
+# Render Blueprint: Render → New → Blueprint → pick this repository.
+# GitHub Actions (.github/workflows/deploy.yml) deploys after the tests pass, so auto-deploy is off.
+services:
+  - type: web
+    name: valet-parking
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: false
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Sign-in tokens and handover PINs are protected with these; Render generates random values.
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: PIN_HMAC_SECRET
+        generateValue: true
+      # Test environment until go-live: demo users, two parked cars and the Test credentials panel.
+      # At go-live set NODE_ENV=production and SEED_DEMO=false, and provide STAFF_USERS_FILE.
+      - key: SEED_DEMO
+        value: "true"
+      - key: SMS_PROVIDER
+        value: manual
+      # On a paid plan, add a disk mounted at /var/data and uncomment this so the Google
+      # connection and SMS settings survive deploys and restarts.
+      # - key: DATA_DIR
+      #   value: /var/data

@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 export interface Config {
   port: number;
   /** Extra https port with a self-signed certificate, for testing GPS and camera on phones; off in production. */
@@ -23,6 +25,8 @@ export interface Config {
   googleSettingsPath: string;
   /** Must match the redirect URI registered on the Google OAuth client. */
   googleRedirectUri: string;
+  /** Git commit being run, reported by /api/health so deployments can confirm the new version is live. */
+  commit?: string;
   sms:
     | { provider: 'off' }
     | { provider: 'log' }
@@ -67,12 +71,17 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (production && seedDemo) {
     throw new Error('SEED_DEMO must be false in production: demo users and test credentials must not go live');
   }
-  const httpsPort = env.HTTPS_PORT === 'off' ? undefined : env.HTTPS_PORT ? Number(env.HTTPS_PORT) : production ? undefined : 8443;
+  // Hosts such as Render provide https and the public address themselves.
+  const hostedUrl = env.RENDER_EXTERNAL_URL?.replace(/\/$/, '');
+  const httpsPort = env.HTTPS_PORT === 'off' || hostedUrl ? undefined : env.HTTPS_PORT ? Number(env.HTTPS_PORT) : production ? undefined : 8443;
+  // Folder for files the server writes (Google connection, SMS settings, write queue, uploads, certificates).
+  const dataDir = env.DATA_DIR ?? '.';
+  const inData = (name: string) => join(dataDir, name);
   return {
     port: Number(env.PORT ?? 8080),
     httpsPort,
-    certDir: env.CERT_DIR ?? 'certs',
-    publicBaseUrl: (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
+    certDir: env.CERT_DIR ?? inData('certs'),
+    publicBaseUrl: (env.PUBLIC_BASE_URL ?? hostedUrl ?? 'http://localhost:5173').replace(/\/$/, ''),
     store,
     seedDemo,
     demoMode: seedDemo && !production,
@@ -80,14 +89,16 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     pinSecret: secret('PIN_HMAC_SECRET'),
     staffUsersFile: env.STAFF_USERS_FILE || undefined,
     photoStorage: env.PHOTO_STORAGE === 'google_drive' ? 'google_drive' : 'local',
-    uploadsDir: env.UPLOADS_DIR ?? 'uploads',
+    uploadsDir: env.UPLOADS_DIR ?? inData('uploads'),
     drivePhotoFolderId: env.DRIVE_PHOTO_FOLDER_ID || undefined,
-    queuePath: env.QUEUE_PATH ?? 'valet.queue.json',
+    queuePath: env.QUEUE_PATH ?? inData('valet.queue.json'),
     webDist: env.WEB_DIST,
     production,
-    smsSettingsPath: env.SMS_SETTINGS_PATH ?? 'sms-settings.json',
-    googleSettingsPath: env.GOOGLE_SETTINGS_PATH ?? 'google-settings.json',
-    googleRedirectUri: env.GOOGLE_REDIRECT_URI ?? `http://localhost:${Number(env.PORT ?? 8080)}/api/google/callback`,
+    smsSettingsPath: env.SMS_SETTINGS_PATH ?? inData('sms-settings.json'),
+    googleSettingsPath: env.GOOGLE_SETTINGS_PATH ?? inData('google-settings.json'),
+    // Google accepts https addresses or localhost, so local testing uses localhost and hosting uses its https address.
+    googleRedirectUri: env.GOOGLE_REDIRECT_URI ?? `${hostedUrl ?? `http://localhost:${Number(env.PORT ?? 8080)}`}/api/google/callback`,
+    commit: env.RENDER_GIT_COMMIT ?? env.GIT_COMMIT,
     sms: smsConfig(env, production),
   };
 }

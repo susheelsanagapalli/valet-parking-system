@@ -1,0 +1,55 @@
+name: Deploy to Render
+
+# Every push to main: run the tests and build, then deploy that exact commit to Render and wait
+# until Render reports it live. Needs the RENDER_DEPLOY_HOOK_URL secret and RENDER_SERVICE_URL variable.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-render
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: render
+      url: ${{ vars.RENDER_SERVICE_URL }}
+    env:
+      HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      SERVICE_URL: ${{ vars.RENDER_SERVICE_URL }}
+    steps:
+      - name: Check settings
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Add the repository secret RENDER_DEPLOY_HOOK_URL (Render → valet-parking → Settings → Deploy Hook)."
+            exit 1
+          fi
+
+      - name: Start the Render deploy of this commit
+        run: curl -fsS -X POST "${HOOK}&ref=${GITHUB_SHA}" > /dev/null && echo "Deploy of ${GITHUB_SHA::7} started"
+
+      - name: Wait until the new version is live
+        if: env.SERVICE_URL != ''
+        run: |
+          for i in $(seq 1 80); do
+            live=$(curl -fsS --max-time 20 "${SERVICE_URL%/}/api/health" | jq -r '.commit // empty' || true)
+            if [ "$live" = "$GITHUB_SHA" ]; then
+              echo "Live: ${SERVICE_URL} is running ${GITHUB_SHA::7}"
+              exit 0
+            fi
+            echo "Waiting for Render… (running: ${live:-not reachable yet})"
+            sleep 15
+          done
+          echo "::error::Render did not start ${GITHUB_SHA::7} within 20 minutes. Check the deploy logs in the Render dashboard."
+          exit 1

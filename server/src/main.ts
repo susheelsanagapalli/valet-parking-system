@@ -117,6 +117,7 @@ const app = createApp({
   notifier,
   smsSettings,
   devCertDer: devCert?.der,
+  commit: config.commit,
   extraPublicRoutes: googlePublicRoutes(googleDeps),
   extraStaffRoutes: googleStaffRoutes(googleDeps),
 });

@@ -107,6 +107,21 @@ describe('test credentials (demo mode only)', () => {
     expect((await request(app).get('/api/demo/credentials')).status).toBe(401);
   });
 
+  it('uses the hosting address on Render and keeps localhost locally', async () => {
+    const { loadConfig } = await import('../src/config.js');
+    const hosted = loadConfig({ RENDER_EXTERNAL_URL: 'https://valet-parking.onrender.com', RENDER_GIT_COMMIT: 'abc123', DATA_DIR: '/var/data', PORT: '10000' });
+    expect(hosted).toMatchObject({
+      port: 10000,
+      httpsPort: undefined,
+      publicBaseUrl: 'https://valet-parking.onrender.com',
+      googleRedirectUri: 'https://valet-parking.onrender.com/api/google/callback',
+      commit: 'abc123',
+    });
+    expect(hosted.googleSettingsPath.replace(/\\/g, '/')).toBe('/var/data/google-settings.json');
+    const local = loadConfig({ PUBLIC_BASE_URL: 'http://192.168.1.5:8080' });
+    expect(local).toMatchObject({ httpsPort: 8443, googleRedirectUri: 'http://localhost:8080/api/google/callback', googleSettingsPath: 'google-settings.json' });
+  });
+
   it('refuses to start production with demo data', async () => {
     const { loadConfig } = await import('../src/config.js');
     expect(() => loadConfig({ NODE_ENV: 'production', SEED_DEMO: 'true', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) })).toThrow(/SEED_DEMO/);
