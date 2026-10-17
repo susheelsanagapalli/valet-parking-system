@@ -1,5 +1,8 @@
 export interface Config {
   port: number;
+  /** Extra https port with a self-signed certificate, for testing GPS and camera on phones; off in production. */
+  httpsPort?: number;
+  certDir: string;
   publicBaseUrl: string;
   store: 'memory' | 'google';
   seedDemo: boolean;
@@ -16,6 +19,10 @@ export interface Config {
   production: boolean;
   /** File for the SMS settings chosen in the admin panel; they override SMS_PROVIDER. */
   smsSettingsPath: string;
+  /** File for the Google account connected in the admin panel (client secret, refresh token, sharing). */
+  googleSettingsPath: string;
+  /** Must match the redirect URI registered on the Google OAuth client. */
+  googleRedirectUri: string;
   sms:
     | { provider: 'off' }
     | { provider: 'log' }
@@ -60,8 +67,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (production && seedDemo) {
     throw new Error('SEED_DEMO must be false in production: demo users and test credentials must not go live');
   }
+  const httpsPort = env.HTTPS_PORT === 'off' ? undefined : env.HTTPS_PORT ? Number(env.HTTPS_PORT) : production ? undefined : 8443;
   return {
     port: Number(env.PORT ?? 8080),
+    httpsPort,
+    certDir: env.CERT_DIR ?? 'certs',
     publicBaseUrl: (env.PUBLIC_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, ''),
     store,
     seedDemo,
@@ -76,6 +86,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     webDist: env.WEB_DIST,
     production,
     smsSettingsPath: env.SMS_SETTINGS_PATH ?? 'sms-settings.json',
+    googleSettingsPath: env.GOOGLE_SETTINGS_PATH ?? 'google-settings.json',
+    googleRedirectUri: env.GOOGLE_REDIRECT_URI ?? `http://localhost:${Number(env.PORT ?? 8080)}/api/google/callback`,
     sms: smsConfig(env, production),
   };
 }

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { useAction } from '../hooks';
 import type { LocationSettings, StaffTicket } from '../types';
@@ -19,11 +19,29 @@ interface Props {
 
 const mark = (r: string) => (r === 'required' ? ' *' : ' (optional)');
 
+/** The same page on the test HTTPS port (8443), where phones allow GPS and the camera. */
+export function secureUrl(): string {
+  return `https://${window.location.hostname}:8443${window.location.pathname}`;
+}
+
+function gpsErrorText(err: GeolocationPositionError | null): string {
+  if (err?.code === 1) {
+    return 'Location permission is off. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → "While Using the App", then reload. On Android: allow location for this site in the browser. Or describe the spot below.';
+  }
+  if (err?.code === 3 || err?.code === 2 || !err) {
+    return 'No GPS fix within 20 seconds (indoors or underground?). Try again in the open, or describe the spot below.';
+  }
+  return 'Could not get the location. Describe the spot below.';
+}
+
 /** Records the parking spot with the text, GPS, photo and zone/slot items switched on for the location (FR-PARK-02, FR-PARK-11). */
 export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking spot' }: Props) {
   const [text, setText] = useState('');
   const [gps, setGps] = useState<Gps | null>(null);
   const [gpsState, setGpsState] = useState<'idle' | 'locating' | 'failed'>('idle');
+  const [gpsProblem, setGpsProblem] = useState<string | null>(null);
+  const stopWatch = useRef<() => void>(() => undefined);
+  useEffect(() => () => stopWatch.current(), []);
   const [photo, setPhoto] = useState<string | undefined>();
   const [zone, setZone] = useState('');
   const [slot, setSlot] = useState('');
@@ -36,20 +54,58 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
   const textRequired = settings.spotText === 'required' || gpsFallback;
   const showText = settings.spotText !== 'off' || gpsFallback;
 
+  /**
+   * Watches the position for up to 20 s and keeps the most accurate reading, stopping early once it
+   * is good enough. A single quick reading often times out indoors, which made capture unreliable.
+   */
   function locate() {
+    stopWatch.current();
+    setGpsProblem(null);
+    if (!window.isSecureContext) {
+      setGpsState('failed');
+      setGpsProblem(
+        `Phones only share GPS with secure (https) pages, and this page is http. Open the staff app at ${secureUrl()} instead (see "GPS and camera on phones" on the sign-in page), or describe the spot below.`,
+      );
+      return;
+    }
     if (!navigator.geolocation) {
       setGpsState('failed');
+      setGpsProblem('This browser cannot read GPS. Describe the spot below.');
       return;
     }
     setGpsState('locating');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyM: Math.round(pos.coords.accuracy) });
+    let best: Gps | null = null;
+    let lastError: GeolocationPositionError | null = null;
+    const finish = () => {
+      stopWatch.current();
+      if (best) {
         setGpsState('idle');
+      } else {
+        setGpsState('failed');
+        setGpsProblem(gpsErrorText(lastError));
+      }
+    };
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const reading = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracyM: Math.round(pos.coords.accuracy) };
+        if (!best || reading.accuracyM < best.accuracyM) {
+          best = reading;
+          setGps(reading);
+        }
+        if (reading.accuracyM <= settings.gpsMinAccuracyM) finish();
       },
-      () => setGpsState('failed'),
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 0 },
+      (err) => {
+        lastError = err;
+        if (err.code === err.PERMISSION_DENIED) finish();
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20_000 },
     );
+    const timer = setTimeout(finish, 20_000);
+    stopWatch.current = () => {
+      clearTimeout(timer);
+      navigator.geolocation.clearWatch(watchId);
+      stopWatch.current = () => undefined;
+    };
   }
 
   async function submit(e: FormEvent) {
@@ -87,15 +143,15 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
         <div className="stack">
           <strong>GPS location{mark(settings.spotGps)}</strong>
           <button type="button" onClick={locate} disabled={gpsState === 'locating'}>
-            {gpsState === 'locating' ? 'Getting location…' : gps ? 'Update location' : 'Capture location'}
+            {gpsState === 'locating' ? (gps ? `Improving accuracy… ±${gps.accuracyM} m` : 'Getting location…') : gps ? 'Update location' : 'Capture location'}
           </button>
           {gps && (
             <div className={`notice ${gpsWeak ? 'warn' : 'ok'}`}>
               {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)} · accuracy {gps.accuracyM} m
-              {gpsWeak && ` — worse than ${settings.gpsMinAccuracyM} m, add a ${settings.spotTextLabel.toLowerCase()}.`}
+              {gpsWeak && gpsState !== 'locating' && ` — worse than ${settings.gpsMinAccuracyM} m, add a ${settings.spotTextLabel.toLowerCase()}.`}
             </div>
           )}
-          {gpsState === 'failed' && <div className="notice warn">No GPS position (e.g. basement). Describe the spot instead.</div>}
+          {gpsState === 'failed' && <div className="notice warn">{gpsProblem ?? 'No GPS position. Describe the spot below.'}</div>}
         </div>
       )}
 

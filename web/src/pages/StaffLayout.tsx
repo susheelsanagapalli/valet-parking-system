@@ -8,6 +8,7 @@ const TABS: Array<{ to: string; label: string; permission: string }> = [
   { to: 'payments', label: 'Payments', permission: 'payments.verify' },
   { to: 'dashboard', label: 'Dashboard', permission: 'reports.view' },
   { to: 'settings', label: 'Settings', permission: 'locations.settings' },
+  { to: 'data', label: 'Data', permission: 'data.manage' },
   { to: 'qr-approvals', label: 'QR approvals', permission: 'payment_qr.approve' },
 ];
 

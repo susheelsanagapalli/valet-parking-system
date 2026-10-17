@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { CarsPage } from './pages/Cars';
 import { CheckInPage } from './pages/CheckIn';
 import { DashboardPage } from './pages/Dashboard';
+import { DataPage } from './pages/Data';
 import { GuestTicketPage } from './pages/GuestTicket';
 import { LoginPage } from './pages/Login';
 import { PaymentsPage } from './pages/Payments';
@@ -24,6 +25,7 @@ export function App() {
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="qr-approvals" element={<QrApprovalsPage />} />
+        <Route path="data" element={<DataPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/staff" replace />} />
     </Routes>

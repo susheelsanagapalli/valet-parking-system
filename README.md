@@ -29,7 +29,25 @@ The panel and demo data only exist in demo mode. With `NODE_ENV=production` they
 
 To work on the web app with live reload, run `npm run dev:server` and `npm run dev:web` in two terminals, then open `http://localhost:5173`.
 
-To store data in Google Sheets instead of memory, copy `server/.env.example` to `server/.env`, set `STORE=google` and fill in the Google settings described in [sheets-integration/README.md](sheets-integration/README.md).
+### Google Sheets as the database
+
+Without Google, demo data lives in memory and is lost on restart. To make Google Sheets the database, sign in as `admin`, open **Data**, and follow the steps on screen: create a Google OAuth client (Drive and Sheets APIs, redirect URI `http://localhost:8080/api/google/callback`), paste its client ID and secret, and click **Connect Google account** on the computer running the server.
+
+The app then creates a "Valet data" folder in that Google account with four spreadsheets (Config, Transactions, Guest data, Audit log) plus Photos and Backups folders, copies the current data in, and from then on saves every change there and loads everything from there when the server starts. It can only see the files it created (`drive.file` permission).
+
+On the Data page admins can:
+
+- **Share** the data folder by email as **Can view** or **Can edit**, so managers and accountants can open it in Google Drive or Sheets on any device, and change or remove that access
+- **Open** the Drive folder and each spreadsheet, and see how close each is to Google's 10 million cell limit
+- **Back up now** (copies of all spreadsheets in the Backups folder), **Check & repair tabs**, **Save now**
+- **Download Excel** of all data
+- **Disconnect** (data stays in Drive)
+
+The Google client secret, sign-in token and sharing list are kept on the server in `google-settings.json` (not in git) and never sent to the browser. Alternatively, `STORE=google` in `server/.env` uses spreadsheets set up with `sheets-integration` scripts (see its README).
+
+### GPS and camera on phones
+
+Phones only allow GPS and the live camera on secure (https) pages. Besides `http://<PC-IP>:8080`, the test server listens on **`https://<PC-IP>:8443`** with its own certificate. Trust it once on each phone: open `http://<PC-IP>:8080/dev-cert.crt`, then on iPhone install it (Settings → General → VPN & Device Management) and switch on full trust (Settings → General → About → Certificate Trust Settings); on Android install it as a CA certificate. The steps are also under **GPS and camera on phones** on the sign-in page. The live site will use a normal certificate instead.
 
 ```bash
 npm test             # data layer and API tests

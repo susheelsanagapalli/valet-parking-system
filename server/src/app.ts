@@ -34,6 +34,12 @@ export interface AppDeps {
   notifier?: Notifier;
   /** SMS settings chosen in the admin panel; changing them switches the notifier's sender. */
   smsSettings?: SmsSettingsStore;
+  /** Test HTTPS certificate (DER), offered at /dev-cert.crt so phones can trust the https test address. */
+  devCertDer?: Buffer;
+  /** Extra routes (e.g. Google Drive administration), mounted under /api after sign-in. */
+  extraStaffRoutes?: (staff: express.Router) => void;
+  /** Extra public routes (e.g. the Google sign-in callback), mounted before sign-in is required. */
+  extraPublicRoutes?: (app: express.Express) => void;
 }
 
 type Handler = (req: Request, res: Response) => unknown | Promise<unknown>;
@@ -166,6 +172,16 @@ export function createApp(deps: AppDeps): express.Express {
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, pendingWrites: repo.queue.pending });
   });
+
+  if (deps.devCertDer) {
+    const der = deps.devCertDer;
+    app.get('/dev-cert.crt', (_req, res) => {
+      res.setHeader('Content-Disposition', 'attachment; filename="valet-test-server.crt"');
+      res.type('application/x-x509-ca-cert').send(der);
+    });
+  }
+
+  deps.extraPublicRoutes?.(app);
 
   app.post(
     '/api/auth/login',
@@ -708,6 +724,7 @@ export function createApp(deps: AppDeps): express.Express {
     }),
   );
 
+  deps.extraStaffRoutes?.(staff);
   app.use('/api', staff);
 
   // ------------------------------------------------------------------ web app

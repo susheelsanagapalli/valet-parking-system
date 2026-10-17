@@ -37,6 +37,53 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 /**
+ * Phones only allow GPS and the live camera on https pages. The test server also runs on https
+ * (port 8443) with its own certificate, which the phone must trust once.
+ */
+function PhoneHttpsHelp() {
+  const host = window.location.hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1';
+  const httpsUrl = `https://${host}:8443/login`;
+  const certUrl = `http://${host}:8080/dev-cert.crt`;
+  if (window.isSecureContext && !isLocal) return <div className="notice ok">Secure address: GPS and the live camera work on this phone.</div>;
+  return (
+    <details>
+      <summary style={{ cursor: 'pointer', fontWeight: 600 }}>GPS and camera on phones</summary>
+      <div className="stack" style={{ marginTop: 8 }}>
+        <p style={{ margin: 0 }}>
+          Phones only share GPS and the live camera with secure (https) pages. {isLocal ? 'On a phone, use this computer’s network address with https.' : 'This address is http, so on a phone open the https address instead:'}
+        </p>
+        {!isLocal && (
+          <a href={httpsUrl} className="mono wrap">
+            {httpsUrl}
+          </a>
+        )}
+        <strong>Trust the test certificate once</strong>
+        <ol style={{ margin: 0, paddingLeft: 20 }}>
+          <li>
+            On the phone, open{' '}
+            <a href={certUrl} className="mono wrap">
+              {isLocal ? 'http://<this computer’s IP>:8080/dev-cert.crt' : certUrl}
+            </a>{' '}
+            and allow the download.
+          </li>
+          <li>
+            <strong>iPhone:</strong> Settings → General → VPN & Device Management → install “Valet Parking test server”. Then Settings → General → About → Certificate Trust Settings → switch it on.
+          </li>
+          <li>
+            <strong>Android:</strong> Settings → Security → Encryption & credentials → Install a certificate → CA certificate → choose the downloaded file.
+          </li>
+          <li>Open the https address above. The browser no longer warns, and Capture location and Scan QR use the GPS and camera.</li>
+        </ol>
+        <p className="muted" style={{ margin: 0 }}>
+          This is only for testing. The live site will use a normal https certificate, with nothing to install.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+/**
  * All test logins and guest ticket links in one place. The server only answers in demo mode, so
  * this renders nothing in production.
  */
@@ -65,6 +112,8 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
     <section className="card stack" aria-labelledby="test-credentials">
       <h2 id="test-credentials">Test credentials</h2>
       <div className="notice warn">{data.notice}</div>
+
+      <PhoneHttpsHelp />
 
       <h3>Staff</h3>
       <p className="muted" style={{ margin: 0 }}>

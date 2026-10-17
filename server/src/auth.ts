@@ -22,6 +22,7 @@ export const PERMISSIONS = [
   'payment_qr.upload',
   'payment_qr.approve',
   'sms.configure',
+  'data.manage',
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 
@@ -31,7 +32,7 @@ export type Role = (typeof ROLES)[number];
 const ATTENDANT: Permission[] = ['tickets.check_in', 'tickets.view', 'tickets.request_car', 'parking.record_spot', 'tasks.accept', 'handover.hand_over', 'payments.record', 'incidents.report'];
 const SUPERVISOR: Permission[] = [...ATTENDANT, 'tasks.assign', 'handover.approve_balance', 'payments.verify', 'guest.view_full_mobile', 'reports.view'];
 const MANAGER: Permission[] = [...SUPERVISOR, 'locations.settings', 'payment_qr.upload'];
-const OPERATOR_ADMIN: Permission[] = [...MANAGER, 'locations.manage', 'sms.configure'];
+const OPERATOR_ADMIN: Permission[] = [...MANAGER, 'locations.manage', 'sms.configure', 'data.manage'];
 
 /** Built-in roles (SRS 2.9.2). Nobody can see handover PINs, so there is no permission for it. */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
