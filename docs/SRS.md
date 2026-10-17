@@ -1,6 +1,6 @@
 # Software Requirements Specification: Valet Parking System
 
-Version 1.5 · Oct 17, 2026 · Manikanta
+Version 1.6 · Oct 17, 2026 · Manikanta
 
 ## Table of contents
 
@@ -23,6 +23,7 @@ Version 1.5 · Oct 17, 2026 · Manikanta
 | 1.3 | Oct 17, 2026 | Vehicle photos made optional and configurable per vendor. Parking spot entered as free text by default, with zone/slot list as an option. Photo storage made a separate, selectable integration (Google Drive by default); records stay in Google Sheets. Photos deleted automatically when the guest link expires after handover. Guest no-damage confirmation required at handover. 4 new functional requirements (93 total). |
 | 1.4 | Oct 17, 2026 | Parking spot capture configurable per client: text, landmark text with GPS location, photo with text, or zone/slot list. White-label branding with a custom app name per client. Settings levels (platform, operator, location). Google Drive integration configurable per client. Master admin panel and permission-based roles, including custom roles assigned per location. 18 new functional requirements (111 total). |
 | 1.5 | Oct 17, 2026 | Parking spot text field, GPS location and spot photo each switchable to off, optional or required per location, independently of each other, with the zone/slot list as a separate switch; rules so a spot is never saved empty. 1 new functional requirement (112 total). |
+| 1.6 | Oct 17, 2026 | Resolved open questions: no payment gateway in v1.0, guests pay by the client's own payment QR (approved by a platform admin, each payment verified manually) or cash; in-app branding only for the attendant app; 7-day photo retention confirmed; abandoned vehicle process configurable per client and jurisdiction; hotel in-and-out privileges added; email alerts to master admin and client when Google Sheets limits are near. Arrival-time requests so the guest asks for the car before reaching the pickup point. Web page only for customers; SMS / WhatsApp provider configurable per client; licence-plate recognition planned for v2.0; hotel system integration out of scope. 8 new functional requirements (120 total). |
 
 ## 1. Introduction
 
@@ -36,13 +37,13 @@ This SRS defines the functional and non-functional requirements for VPS version 
 
 VPS consists of five components:
 
-- **Customer web/mobile app** — receive a digital ticket, request the car, pay, confirm handover, rate the service; shown under the client's app name.
+- **Customer web app (PWA)** — opened from the SMS link with nothing to install; receive a digital ticket, request the car, pay, confirm handover, rate the service; shown under the client's app name.
 - **Valet attendant app** — check vehicles in and out, record the parking spot (text, GPS, photo or slot), park and retrieve.
 - **Admin web portal** — for each operator: locations, service profiles and settings, branding, roles and users, merchants, pricing, Google Drive integration, reports and incidents; merchant validation page.
 - **Master admin panel** — for the VPS platform team: operators, platform roles and users, platform default settings and profiles, and integration health of every operator.
 - **Backend services** — API, business rules, permission checks, notifications, payment integration, the data layer that stores all records in the operator's Google Sheets, and the photo storage integration.
 
-In scope: paid parking operators, restaurants, hotels, hospitals, malls and event venues running one or many valet locations, each configured through service profiles (section 2.7). Out of scope for v1.0: automated (robotic) parking, licence-plate recognition cameras, self-park garage gate control, billing operators for use of the platform, a separate database server, and separate app-store builds of the native apps for each client.
+In scope: paid parking operators, restaurants, hotels, hospitals, malls and event venues running one or many valet locations, each configured through service profiles (section 2.7). Out of scope for v1.0: automated (robotic) parking, licence-plate recognition (planned for v2.0), hotel property-management system integration (room charge), native customer apps, self-park garage gate control, billing operators for use of the platform, a separate database server, separate app-store builds of the native apps for each client, and online payment gateway integration (guests pay the operator directly by payment QR or cash).
 
 ### 1.3 Definitions and acronyms
 
@@ -68,6 +69,10 @@ In scope: paid parking operators, restaurants, hotels, hospitals, malls and even
 | GPS location | Latitude, longitude and accuracy captured from the attendant's phone when the parking spot is saved |
 | Zone / Slot | An area and a numbered space within a location, used when the location uses zone/slot mode |
 | Pickup point | A place at a location where cars are dropped off and handed back |
+| Arrival-time request | A guest's request for the car made before reaching the pickup point, saying when they will arrive (e.g. "in 10 minutes") |
+| In-and-out privilege | Letting a guest (typically a hotel guest) take the car out and bring it back several times on one ticket |
+| Payment QR | The operator's own payment QR code (e.g. UPI), uploaded by the operator and shown to guests; payments go directly to the operator |
+| Transaction reference | The reference number of a QR payment (e.g. UPI UTR), entered by the guest and used by staff to verify it |
 | Photo storage | The integration that holds photos (Google Drive by default); separate from the Google Sheets records |
 | App name | The client's own name for the product, shown to guests and staff instead of "VPS" |
 | Permission | A single action a user may perform (e.g. approve handover override) |
@@ -97,7 +102,7 @@ VPS is a new, cloud-hosted, multi-tenant product: one deployment serves many ope
 
 ### 2.1 Product perspective
 
-The customer app, attendant app, admin portal and master admin panel are thin clients over a REST API. The backend owns all business rules and permission checks, and integrates with an SMS/WhatsApp gateway, a push-notification service, a payment gateway, a map service, the operator's Google Sheets and Drive, and the operator's chosen photo storage. Because Google Sheets has no transactions or row locks and limits API calls per minute, the backend keeps a rebuildable in-memory cache with locks for live operations, and a durable write queue that batches writes to Sheets. The architecture diagram below shows the parts and what calls what.
+The customer app, attendant app, admin portal and master admin panel are thin clients over a REST API. The backend owns all business rules and permission checks, and integrates with an SMS/WhatsApp gateway, a push-notification service, a map service, an email service, the operator's Google Sheets and Drive, and the operator's chosen photo storage. Because Google Sheets has no transactions or row locks and limits API calls per minute, the backend keeps a rebuildable in-memory cache with locks for live operations, and a durable write queue that batches writes to Sheets. The architecture diagram below shows the parts and what calls what.
 
 ```mermaid
 flowchart LR
@@ -122,7 +127,6 @@ flowchart LR
     end
     PHOTO[("Photo storage<br/><small>Google Drive (default)<br/>or object storage</small>")]
     subgraph External["External services"]
-        PG[Payment gateway]
         SMS[SMS / WhatsApp]
         PUSH["Push (FCM / APNs)"]
         MAP[Maps service]
@@ -135,7 +139,6 @@ flowchart LR
     QUEUE --> SHEETS
     API --> DRIVE
     API -->|only if photos enabled| PHOTO
-    API --> PG
     API --> SMS
     API --> PUSH
     API --> MAP
@@ -150,9 +153,11 @@ The backend is the only component holding business rules and credentials for ext
 - Vehicle check-in with key tag, custom fields and optional vehicle photos
 - Parking spot capture chosen per client: text, landmark + GPS location, photo + text, or zone/slot
 - Car retrieval request by the guest, merchant or staff, with live status and ETA
+- Arrival-time requests, so the car is ready when the guest reaches the pickup point
+- In-and-out privileges for hotel guests on one ticket
 - Task queue and assignment for attendants, with the parked car shown on a map where GPS is used
 - Guest no-damage confirmation at handover
-- Payment (prepaid at flat-tariff locations, pay-on-exit, validated/complimentary)
+- Payment by the operator's own payment QR (verified manually) or cash: prepaid at flat-tariff locations, pay-on-exit, validated/complimentary
 - White-label branding with the client's own app name
 - Service profiles and settings at platform, operator and location level
 - Master admin panel and permission-based roles, including custom roles
@@ -172,19 +177,19 @@ The table lists the built-in roles. Operators can also create custom roles (sect
 | Location manager | Configure location, staff, pricing; view reports; handle overdue vehicles | Daily | Medium |
 | Operator admin | Set branding, app name, Google Drive integration, roles and users; manage locations, settings, merchants | Weekly | High |
 | Merchant / validator | Validate or comp a guest's ticket; request a guest's car (e.g. restaurant host) | Occasional | Low |
-| Platform admin | Create, configure and suspend operators; manage platform roles, defaults and profiles | Occasional | High |
+| Platform admin | Create, configure and suspend operators; approve payment QRs; manage platform roles, defaults and profiles | Occasional | High |
 | Platform support | Check operators' setup and integration health; help with configuration | Occasional | High |
 
 ### 2.4 Operating environment
 
-- Customer app: responsive web (PWA) on current Chrome, Safari, Edge, Firefox; optional native Android 10+ / iOS 15+.
+- Customer app: responsive web (PWA) on current Chrome, Safari, Edge, Firefox; can be added to the home screen. No native customer app in v1.0.
 - Attendant app: Android 10+ and iOS 15+ phones with GPS; must work on rugged Android devices.
 - Admin portal and master admin panel: desktop browsers at 1280×720 or larger.
 - Backend: containerised cloud hosting (e.g. AWS, Azure or GCP) with an in-memory cache, a durable queue and a small platform registry; Google Sheets in each operator's chosen Google account as the data store; photo storage in Google Drive or an S3-compatible object store.
 
 ### 2.5 Design and implementation constraints
 
-- Card data must never be stored by VPS; payments go through a PCI DSS compliant gateway (tokenised).
+- VPS does not process payments in v1.0: guests pay the operator directly through the operator's own payment QR or in cash, and staff verify payments manually. VPS never handles card or bank account details.
 - Personal data handling must comply with applicable privacy law (e.g. India DPDP Act 2023, GDPR where guests are in the EU).
 - All operator records shall be stored in Google Sheets in the operator's chosen Google account; no separate database server is used. Photos, where enabled, are stored only in the operator's chosen photo storage and referenced from Sheets. The platform registry holds only operators, platform users and roles, and connection status; credentials are encrypted in a secret manager. The cache and write queue hold data only transiently.
 - Customer and vehicle data must be isolated per operator and never shared across operators.
@@ -201,7 +206,7 @@ The table lists the built-in roles. Operators can also create custom roles (sect
 - Each location has at least one working Bluetooth ticket printer.
 - Each operator has a Google account (Google Workspace recommended), or uses a platform-managed Google account (FR-DATA-01). Where photos are enabled, photos are compressed to 300 KB or less and kept only until the guest link expires, so photo storage needs stay small.
 - Phone GPS is accurate to about 5–20 m in open areas but may be poor or unavailable in basements and multi-storey car parks; the landmark text covers those cases.
-- Google Sheets, Google Drive, the photo storage and third-party SMS, payment, push and map services are available at 99.9% or better.
+- Google Sheets, Google Drive, the photo storage and third-party SMS, push, map and email services are available at 99.9% or better.
 - Physical key storage (key box/hooks) exists and is numbered.
 
 ### 2.7 Configurability and service profiles
@@ -222,23 +227,28 @@ Every location chooses a service profile when it is created. The profile fills i
 | Charging model | Tariff (hourly/daily/overnight), flat fee, complimentary | Tariff | FR-PAY-01, FR-PAY-12 |
 | Payment timing | Prepaid at check-in (flat fee only), pay on exit, none | Pay on exit | FR-PAY-03, FR-PAY-10 |
 | Payment required before handover | Yes, no | Yes | FR-PAY-14 |
-| Online payment | On, off | On | FR-PAY-03 |
+| Payment methods | Payment QR, cash, card terminal (any combination) | Payment QR and cash | FR-PAY-03, FR-PAY-04, FR-PAY-15, FR-PAY-16 |
 | Merchant validation | Off, on; allowed rule types (free, amount off, percentage off, free above minimum bill) | Off | FR-PAY-05, FR-PAY-13 |
 | Merchants can request cars | Yes, no | No | FR-OUT-12 |
 | Tips | Off, to retrieving attendant, to shift pool | Off | FR-PAY-06 |
 | Custom check-in fields | List of fields (text, number, list), each required or optional | None | FR-CFG-03 |
 | Damage diagram | On, off | Off | FR-IN-04 |
 | Scheduled pickup | On, off; maximum hours ahead | Off; 24 h | FR-OUT-02 |
+| Arrival-time request | On, off; arrival options in minutes | On; 5, 10, 15, 30 | FR-OUT-15 |
+| In-and-out privileges | Off, on; pause fee while car is out (yes/no); stay end date required (yes/no) | Off | FR-OUT-16, FR-OUT-17 |
 | Auto-dispatch | On, off | Off | FR-TASK-04 |
 | Task not accepted alert | Minutes | 2 | FR-TASK-05 |
 | Occupancy alert (zone/slot mode only) | Percentage | 90% | FR-PARK-06 |
 | Overdue limit | Hours, or "at closing time" | 24 h | FR-ADM-08 |
+| Abandoned vehicle process | Notice period (days), number and interval of reminders, required steps (e.g. notify guest, notify police, tow), notice templates; set to match the client's state or jurisdiction | 7 days; 3 reminders; notify guest | FR-ADM-10, FR-ADM-12 |
 | Closing-time alert | Off, or minutes before closing | Off | FR-ADM-11 |
 | Ratings | On, off | On | FR-ADM-07 |
 | Guest link expiry after closure (also when photos and GPS are deleted) | Days | 7 | NFR-SEC-02, FR-DATA-08 |
 | Personal data retention | Days | 90 | NFR-PRIV-02 |
 | Languages | English plus selected regional languages | English | FR-ADM-09 |
 | Message templates | Per message type and language | Standard templates | FR-NOT-03 |
+| SMS / WhatsApp provider (operator level) | Platform default provider, or the client's own provider account; sender ID | Platform default (e.g. MSG91) | FR-NOT-05 |
+| Capacity alerts (operator level) | Thresholds as % of Google Sheets limits; email recipients | 70%; operator admins and platform admins | FR-DATA-12 |
 
 The text field, GPS location and spot photo are switched independently; each can be off, optional (the attendant may skip it) or required (the spot cannot be saved without it). Together with the zone/slot list they give the common capture methods:
 
@@ -267,12 +277,14 @@ The table shows where each profile's defaults differ from the catalogue defaults
 | Vehicle photos | Required (4) | Optional | Optional | Off |
 | Charging model | Tariff | Complimentary or flat fee | Tariff (hourly, overnight) | Flat fee |
 | Payment timing | Pay on exit | None, or pay on exit | Pay on exit | Prepaid at check-in |
+| Payment methods | Payment QR, cash | Payment QR, cash (when a fee applies) | Payment QR, cash | Payment QR, cash at check-in |
 | Payment required before handover | Yes | No | No | Yes |
 | Merchant validation | Off | On: free above minimum bill | On: front desk | Off |
 | Merchants can request cars | No | Yes (host requests car when the bill is asked for) | Yes (front desk) | No |
 | Tips | Off | To retrieving attendant | To shift pool | Off |
 | Custom check-in fields | — | Reservation name, table number | Room number | — |
 | Scheduled pickup | Off | Off | On | Off |
+| In-and-out privileges | Off | Off | On (stay end date required) | Off |
 | Overdue limit | 24 h | At closing time | 7 days | 6 h after event end |
 | Closing-time alert | Off | 30 min before closing | Off | 30 min before event end |
 
@@ -311,16 +323,16 @@ Access is permission-based. A **role** is a set of permissions; a user receives 
 | Parking | Record parking spot; move vehicle; manage zones and slots |
 | Tasks | Accept tasks; assign and re-prioritise tasks |
 | Handover | Hand over vehicle; approve handover override; approve release with balance due |
-| Payments | Record payment; issue refund; view revenue |
+| Payments | Record cash or card-terminal payment; verify QR payment; record refund; view revenue |
 | Merchants | Validate tickets; request car for guest; manage merchants |
 | Incidents | Report incident; manage incidents |
 | Reports | View reports; export reports |
 | Guest data | View full guest mobile number |
 | Location setup | Manage locations; edit location settings; manage tariffs; manage pickup points |
-| Operator setup | Edit operator settings and branding; manage Google Drive and photo storage integration |
+| Operator setup | Edit operator settings and branding; manage Google Drive and photo storage integration; upload payment QR |
 | Users and roles | Manage users; manage custom roles; assign roles |
 | Audit | View audit log |
-| Platform (master admin panel only) | Manage operators; manage platform users and roles; edit platform defaults and profiles; view integration health of all operators |
+| Platform (master admin panel only) | Manage operators; manage platform users and roles; edit platform defaults and profiles; approve payment QRs; view integration health of all operators |
 
 No role can be granted permission to view handover PINs (NFR-PRIV-01).
 
@@ -332,13 +344,13 @@ No role can be granted permission to view handover PINs (NFR-PRIV-01).
 | Platform support | Platform | View operators, settings and integration health; no guest data unless an operator grants time-limited access (FR-ROLE-07) |
 | Operator admin | All of the operator's locations | All operator permissions |
 | Location manager | Selected locations | All operator permissions for those locations except Operator setup and Users and roles; may manage users at their locations if granted |
-| Supervisor | Selected locations | Check in, record spot, move vehicle, view and search tickets, assign tasks, hand over, approve handover override, approve release with balance due, record payment, report incident, view full mobile number, view reports |
+| Supervisor | Selected locations | Check in, record spot, move vehicle, view and search tickets, assign tasks, hand over, approve handover override, approve release with balance due, record payment, verify QR payment, report incident, view full mobile number, view reports |
 | Attendant | Selected locations | Check in, record spot, move vehicle, view tickets, accept tasks, hand over, record payment, report incident |
 | Merchant validator | Selected locations | Validate tickets; request car for guest (where enabled) |
 
 ## 3. Functional requirements
 
-VPS has 112 functional requirements across twelve modules; priorities use MoSCoW (Must, Should, Could), and every Must item is required for v1.0 acceptance. Where a requirement depends on a setting, it applies only when that setting is on for the location. Requirements that name a role mean any user whose role holds the matching permission (section 2.9).
+VPS has 120 functional requirements across twelve modules; priorities use MoSCoW (Must, Should, Could), and every Must item is required for v1.0 acceptance. Where a requirement depends on a setting, it applies only when that setting is on for the location. Requirements that name a role mean any user whose role holds the matching permission (section 2.9).
 
 ### 3.1 Authentication and user management
 
@@ -401,12 +413,15 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | FR-OUT-12 | Where merchants can request cars, a merchant validator shall create a retrieval request for a guest's ticket (e.g. a restaurant host when the guest asks for the bill). | Should |
 | FR-OUT-13 | Where handover confirmation is on, the guest shall confirm before the ticket closes that the car was received with no new damage: by tapping "Car received, no damage" on the ticket page, or, for guests without the ticket page, by signing on the attendant's device. The confirmation, method and time shall be recorded on the ticket. | Must |
 | FR-OUT-14 | If the guest reports damage instead of confirming, the system shall open an incident linked to the ticket, keep the ticket's photos until the incident is resolved, and let the attendant complete the handover. | Must |
+| FR-OUT-15 | Where arrival-time request is on, the guest shall request the car before reaching the pickup point by choosing when they will arrive (configured options, default 5, 10, 15 or 30 minutes, or a clock time). The system shall release the task to the queue when the time left equals the estimated retrieval time, so the car is ready on arrival; the guest can change the arrival time or tap "I'm here" to bring the task forward. The ticket issue message shall remind the guest to request the car before arriving. | Must |
+| FR-OUT-16 | Where in-and-out privileges are on, handing the car back shall leave the ticket open in state Out instead of closing it: the parking spot is freed, payment may be left until the end of the stay, and a handover confirmation is recorded for each exit. | Must |
+| FR-OUT-17 | When an in-and-out guest returns, the attendant shall scan or enter the existing ticket to check the car in again, recording a new parking spot and photos per the location's settings; each exit and return is logged. The ticket closes at the final handover when the attendant or guest marks it as the end of the stay, or on the stay end date if the car is out; photos are then deleted per FR-DATA-08. | Must |
 
 ### 3.5 Task dispatch and attendant workflow
 
 | ID | Requirement | Priority |
 | --- | --- | --- |
-| FR-TASK-01 | The system shall place every retrieval request in a location queue ordered by request time (scheduled requests at their due time). | Must |
+| FR-TASK-01 | The system shall place every retrieval request in a location queue ordered by request time (scheduled and arrival-time requests at their release time). | Must |
 | FR-TASK-02 | Attendants shall accept a task from the queue; one task shall be held by only one attendant. | Must |
 | FR-TASK-03 | Supervisors shall assign, re-assign and re-prioritise tasks (e.g. VIP). | Must |
 | FR-TASK-04 | The system shall auto-assign tasks to the available attendant with the fewest active tasks when auto-dispatch is on. | Could |
@@ -418,19 +433,21 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | ID | Requirement | Priority |
 | --- | --- | --- |
 | FR-PAY-01 | Admins shall configure tariffs per location: flat fee, hourly, daily cap, overnight, and free minutes. | Must |
-| FR-PAY-02 | The system shall calculate the fee from check-in to the time of the latest non-cancelled retrieval request (for a scheduled pickup, the scheduled time) using the location tariff; a cancelled request does not stop the fee clock. | Must |
-| FR-PAY-03 | Where online payment is on, the guest shall pay by card, UPI or wallet via the payment gateway before or at pickup. | Must |
-| FR-PAY-04 | The attendant shall record cash or card-terminal payment at handover. | Must |
+| FR-PAY-02 | The system shall calculate the fee from check-in to the time of the latest non-cancelled retrieval request (for a scheduled pickup or arrival-time request, the chosen time) using the location tariff; a cancelled request does not stop the fee clock. For in-and-out tickets the fee covers the whole stay, excluding time the car is out where pause fee while out is set. | Must |
+| FR-PAY-03 | Where payment QR is a payment method, the ticket page shall show the fee and the operator's approved payment QR; the guest pays from their own UPI or wallet app before or at pickup and may enter the transaction reference. | Must |
+| FR-PAY-04 | The attendant shall record cash payment, or card-terminal payment where the location uses a terminal, at handover. | Must |
 | FR-PAY-05 | Merchant validators shall validate a ticket for free or discounted parking within their merchant's allowed discounts and monthly cap. | Should |
-| FR-PAY-06 | The guest shall be able to add a tip; each location shall configure whether tips go to the retrieving attendant or to a shift pool. | Could |
+| FR-PAY-06 | The guest shall be able to add a tip, paid by payment QR or cash; each location shall configure whether tips go to the retrieving attendant or to a shift pool. | Could |
 | FR-PAY-07 | The system shall issue a digital receipt with tax breakdown by SMS/email. | Must |
-| FR-PAY-08 | Managers shall issue full or partial refunds, with a reason, logged in the audit trail. | Should |
+| FR-PAY-08 | Managers shall record full or partial refunds paid back outside VPS (cash or bank transfer), with a reason, logged in the audit trail. | Should |
 | FR-PAY-09 | The system shall support monthly pass holders who are not charged per visit. | Could |
-| FR-PAY-10 | At locations with a flat tariff, the guest shall be able to prepay at check-in. | Should |
+| FR-PAY-10 | At locations with a flat tariff, the guest shall be able to prepay at check-in by payment QR or cash. | Should |
 | FR-PAY-11 | Admins shall create merchants (name, locations, allowed discount types and values, monthly cap) and their validator accounts. | Should |
 | FR-PAY-12 | A ticket with nothing due (complimentary, full validation or monthly pass) shall be settled with a payment record of amount 0 stating the reason. | Must |
 | FR-PAY-13 | Validations shall support the rule types free, fixed amount off, percentage off, and free when the bill amount entered by the validator meets a configured minimum. | Should |
 | FR-PAY-14 | Where payment is required before handover, the attendant app shall not close a ticket with a balance due unless a supervisor approves; approvals shall be logged. | Must |
+| FR-PAY-15 | Operator admins shall upload the operator's payment QR image (for all locations or per location) with the payee name. A platform admin shall verify it manually (e.g. that the payee matches the operator) before it is shown to guests; any replacement needs approval again, and every upload and approval is logged. | Must |
+| FR-PAY-16 | A guest's QR payment shall show as Pending verification until a user with the verify QR payment permission checks it in the operator's own payment account (amount and transaction reference) and marks it Verified or Rejected. A pending payment counts as unpaid for FR-PAY-14, and the guest is told if a payment is rejected. | Must |
 
 ### 3.7 Notifications
 
@@ -440,6 +457,7 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | FR-NOT-02 | The attendant app shall receive push notifications for new and assigned tasks. | Must |
 | FR-NOT-03 | Admins shall edit message templates per location and language. | Should |
 | FR-NOT-04 | The system shall retry failed messages up to 3 times and log the delivery status. | Should |
+| FR-NOT-05 | Operator admins shall choose the SMS / WhatsApp provider: the platform's default provider (one supported at launch, e.g. MSG91 for India), or their own provider account with their own sender ID and credentials. | Should |
 
 ### 3.8 Incident and damage management
 
@@ -463,8 +481,9 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | FR-ADM-07 | The system shall collect a 1–5 star rating and comment from the guest after handover, while the ticket link is valid. | Should |
 | FR-ADM-08 | Tickets older than the location's overdue limit (default 24 hours) shall be listed as overdue; the system shall alert the location manager and send the guest a reminder. | Should |
 | FR-ADM-09 | The system shall support multiple languages for the customer app (English plus at least one regional language). | Should |
-| FR-ADM-10 | Managers shall mark an overdue vehicle as Abandoned with a reason; this ends the ticket, frees the parking spot and is logged in the audit trail. | Should |
+| FR-ADM-10 | Managers shall mark an overdue vehicle as Abandoned with a reason once the location's abandoned vehicle process is complete (notice period passed, reminders sent, required steps recorded); this ends the ticket, frees the parking spot and is logged in the audit trail. | Should |
 | FR-ADM-11 | Where a closing-time alert is set, the system shall send the supervisor the list of cars still parked at the configured time before closing. | Should |
+| FR-ADM-12 | Operator admins shall configure the abandoned vehicle process per location to match the client's state or jurisdiction: notice period, number and interval of reminders, required steps (e.g. notify guest, notify police, tow) and who records each, and notice templates. The system shall track each overdue vehicle through these steps. | Should |
 
 ### 3.10 Configuration, customisation and branding
 
@@ -473,7 +492,7 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | FR-CFG-01 | When creating a location, admins shall choose a service profile (Paid parking, Restaurant, Hotel, Event venue, Custom), which fills in the default settings in section 2.7.2. | Must |
 | FR-CFG-02 | Operator admins shall change any setting in the settings catalogue (section 2.7.1) from the admin panel, taking effect without a code change or redeployment. | Must |
 | FR-CFG-03 | Operator admins shall define custom check-in fields per location (label, type text/number/list, required or optional, shown on ticket and reports). | Should |
-| FR-CFG-04 | Operator admins shall turn optional features on or off per location: vehicle photos, parking spot text field, GPS and photo (each off, optional or required), zone/slot list, handover confirmation, online payment, tips, ratings, scheduled pickup, merchant validation, merchant car requests, damage diagram, auto-dispatch. | Must |
+| FR-CFG-04 | Operator admins shall turn optional features on or off per location: vehicle photos, parking spot text field, GPS and photo (each off, optional or required), zone/slot list, handover confirmation, payment methods, arrival-time request, in-and-out privileges, tips, ratings, scheduled pickup, merchant validation, merchant car requests, damage diagram, auto-dispatch. | Must |
 | FR-CFG-05 | Operator admins shall set branding for the operator, with location overrides where section 2.8 allows: logo, app icon, colours, ticket header and footer text, terms and conditions, SMS sender ID and email sender name. | Must |
 | FR-CFG-06 | Settings changes shall be versioned and logged in the audit trail; each ticket records the settings version in force at check-in and keeps those rules until it ends. | Must |
 | FR-CFG-07 | Operator admins shall save a location's settings as a named custom profile and apply it to other locations. | Could |
@@ -498,6 +517,7 @@ VPS has 112 functional requirements across twelve modules; priorities use MoSCoW
 | FR-DATA-09 | Operator admins shall configure the Drive integration: folder and file naming pattern (default per section 6.4), which reports are exported to Drive automatically and how often, backup frequency and number of copies kept, and the email addresses the spreadsheets are shared with as view-only. | Should |
 | FR-DATA-10 | When an operator admin changes the Google account or root folder, the system shall copy the current month's spreadsheets and the Config spreadsheet to the new place and continue there; earlier months stay where they are and are linked from Config. | Could |
 | FR-DATA-11 | The master admin panel shall show each operator's integration health: Google connection, API quota use, write queue length, and Drive and photo storage use. | Should |
+| FR-DATA-12 | The system shall check Google Sheets and Drive limits (API quota use, spreadsheet size against the cell limit, write queue delay, response times against NFR-PERF-01) and email the operator admins and platform admins when a configured threshold is crossed (default 70% of a limit), saying which limit is near and that a move to a relational database (NFR-SCAL-03) may be needed. Thresholds and email recipients are configurable per operator. | Must |
 
 ### 3.12 Master admin panel, roles and permissions
 
@@ -518,10 +538,10 @@ All clients use one versioned HTTPS REST API (JSON), plus a WebSocket channel fo
 
 ### 4.1 User interfaces
 
-- **Customer ticket page:** opens from the SMS link without login, under the operator's app name, branding and (optionally) domain; shows ticket number, QR code, handover PIN, any vehicle photos, status, ETA, fee, pickup point choice and a large "Request my car" button. At handover it shows "Car received, no damage" and "Report damage" buttons.
+- **Customer ticket page:** opens from the SMS link without login, under the operator's app name, branding and (optionally) domain; shows ticket number, QR code, handover PIN, any vehicle photos, status, ETA, fee, the operator's payment QR with a transaction reference field, pickup point choice, a large "Request my car" button and "I'll arrive in…" options. At handover it shows "Car received, no damage" and "Report damage" buttons.
 - **Attendant app:** shows the operator's app name and branding after login; large touch targets (at least 48×48 dp), high-contrast theme for outdoor use, QR scanner, parking spot capture per the location's method (labelled text field, GPS capture with accuracy shown, spot photo, or zone/slot picker), map with the parked car's pin and walking directions, optional vehicle photo capture, ticket printing, task list with one-tap accept, the location's custom check-in fields, and a signature screen for handover confirmation. Shows only actions the user's permissions allow. Handover PINs are never displayed.
-- **Admin portal:** dashboard (with map where GPS is used), Google Drive and photo storage integration, branding and app name, location setup, service profiles and settings with their level shown, custom fields, roles, users and permissions matrix, merchants, tariffs, tickets, incidents, reports; tables with search, filter and export.
-- **Master admin panel:** operators (create, configure, suspend, copy configuration), platform users and roles, platform default settings and service profiles, integration health per operator.
+- **Admin portal:** dashboard (with map where GPS is used), Google Drive and photo storage integration, branding and app name, location setup, service profiles and settings with their level shown, custom fields, roles, users and permissions matrix, payment QR upload, QR payment verification queue, abandoned vehicle process, merchants, tariffs, tickets, incidents, reports; tables with search, filter and export.
+- **Master admin panel:** operators (create, configure, suspend, copy configuration), platform users and roles, platform default settings and service profiles, payment QR approval, integration health and capacity alerts per operator.
 - **Merchant validation page:** scan or enter a ticket number, enter the bill amount where required, apply an allowed discount and, where enabled, request the guest's car.
 - All interfaces shall meet WCAG 2.1 level AA.
 
@@ -533,7 +553,7 @@ All clients use one versioned HTTPS REST API (JSON), plus a WebSocket channel fo
 | Smartphone GPS | Parking spot location where enabled | GPS/GNSS receiver; location permission granted to the attendant app |
 | Smartphone touch screen | Guest signature for handover confirmation | Standard capacitive screen |
 | Bluetooth thermal printer | Printed tickets (no mobile number, offline, on request) | At least one per location; ESC/POS compatible, 58 or 80 mm |
-| Card payment terminal | Card payment at handover | Standalone; amount entered manually in v1.0 |
+| Card payment terminal (optional) | Card payment at handover where the location uses one | Standalone; amount entered manually |
 | Display screen at pickup | Queue / "car ready" board | Any browser-capable screen (optional) |
 
 ### 4.3 Software interfaces
@@ -544,11 +564,10 @@ All clients use one versioned HTTPS REST API (JSON), plus a WebSocket channel fo
 | Google Drive API | Folders, reports, backups, signatures; photos when Drive is the photo storage | REST API; files shown to users through short-lived backend links |
 | Google OAuth 2.0 and Google Picker | Consent to access the chosen Google account; choosing an existing root folder | OAuth 2.0, `drive.file` scope (files created or picked by VPS only) |
 | S3-compatible object storage (optional) | Photo storage when chosen instead of Drive | S3 API; signed, short-lived URLs |
-| Payment gateway (e.g. Razorpay, Stripe) | Online payments, refunds | REST API + webhooks, tokenised cards |
-| SMS / WhatsApp gateway (e.g. Twilio, MSG91) | Ticket links, PINs, OTP, alerts, with operator sender ID | REST API, delivery-status callbacks |
+| SMS / WhatsApp gateway (platform default, e.g. MSG91, or the client's own provider) | Ticket links, PINs, OTP, alerts, with operator sender ID | REST API, delivery-status callbacks |
 | Push service (FCM / APNs) | Attendant task alerts | Provider SDK |
 | Maps service (e.g. Google Maps) | Location address, parked car pins, walking directions to the car and to the pickup point | JavaScript / REST API, mobile SDK |
-| Email service (e.g. SES, SendGrid) | Receipts, reports, with operator sender name | SMTP / REST API |
+| Email service (e.g. SES, SendGrid) | Receipts, reports, capacity alerts, with operator sender name | SMTP / REST API |
 
 ### 4.4 Communication interfaces
 
@@ -559,7 +578,7 @@ All clients use one versioned HTTPS REST API (JSON), plus a WebSocket channel fo
 
 ## 5. Non-functional requirements
 
-The targets below are measurable acceptance criteria. They are sized for Google Sheets as the data store; the headline ones are 99.5% monthly uptime, API responses under 1 s at the 95th percentile, and zero stored card data.
+The targets below are measurable acceptance criteria. They are sized for Google Sheets as the data store; the headline ones are 99.5% monthly uptime, API responses under 1 s at the 95th percentile, and no card or bank data handled.
 
 | ID | Category | Requirement |
 | --- | --- | --- |
@@ -568,7 +587,7 @@ The targets below are measurable acceptance criteria. They are sized for Google 
 | NFR-PERF-03 | Performance | The customer ticket page shall load in under 3 s on a 4G connection. |
 | NFR-PERF-04 | Performance | Accepted changes shall be written to Google Sheets within 60 s under normal conditions. |
 | NFR-PERF-05 | Performance | Where GPS is on, the attendant app shall obtain a position within 10 s outdoors, or tell the attendant that none is available. |
-| NFR-SCAL-01 | Scalability | The system shall support, across the platform, 20 locations, 200 concurrent staff users and 2,000 tickets per day within default Google API quotas. Growth beyond this requires a Google quota increase or the migration in NFR-SCAL-03. |
+| NFR-SCAL-01 | Scalability | The system shall support, across the platform, 20 locations, 200 concurrent staff users and 2,000 tickets per day within default Google API quotas. Growth beyond this requires a Google quota increase or the migration in NFR-SCAL-03; the capacity alerts in FR-DATA-12 signal when to plan it. |
 | NFR-SCAL-02 | Scalability | A single location shall handle peaks of 100 check-ins per hour. |
 | NFR-SCAL-03 | Scalability | All data access shall go through a storage layer so that a relational database can replace Google Sheets later without changes to the clients or business rules. |
 | NFR-AVL-01 | Availability | Monthly uptime shall be at least 99.5%, excluding announced maintenance (max 4 hours/month, off-peak). |
@@ -591,7 +610,7 @@ The targets below are measurable acceptance criteria. They are sized for Google 
 | NFR-MNT-01 | Maintainability | Backend code shall have at least 70% automated test coverage, including every service profile, parking spot capture method and built-in role; deployments via CI/CD with rollback. |
 | NFR-MNT-02 | Maintainability | The system shall provide centralised logs, metrics and alerting for errors, latency, write queue length and Google API quota use. |
 | NFR-PORT-01 | Portability | Services shall run in containers and avoid lock-in to one cloud provider's proprietary services where practical. |
-| NFR-LEG-01 | Compliance | Payment flows shall comply with PCI DSS (SAQ A scope); invoices shall meet local tax (e.g. GST) rules. |
+| NFR-LEG-01 | Compliance | VPS shall not collect or store card or bank account details, so PCI DSS does not apply in v1.0; receipts and invoices shall meet local tax (e.g. GST) rules. |
 
 ## 6. Data requirements
 
@@ -616,12 +635,14 @@ The Ticket is the central record: every vehicle, photo, task, payment and incide
 | Shift | id, user, location, clock-in time, clock-out time | belongs to User |
 | Customer | id, mobile (optional), name (optional), language | belongs to Operator; has many Tickets, Vehicles |
 | Vehicle | id, plate number, make, model, colour | belongs to Operator; has many Tickets |
-| Ticket | id, ticket number, QR token, handover PIN (keyed hash), status, check-in time, request time, scheduled time, close time, key tag, parking spot text, spot GPS (latitude, longitude, accuracy), slot (zone/slot mode), pickup point, settings version, custom field values, abandoned reason | links Customer, Vehicle, Location; has Photos, Tasks, Payments, Incidents, Overrides, Handover confirmation |
+| Ticket | id, ticket number, QR token, handover PIN (keyed hash), status, check-in time, request time, scheduled time, requested arrival time, in-and-out (yes/no), stay end date, close time, key tag, parking spot text, spot GPS (latitude, longitude, accuracy), slot (zone/slot mode), pickup point, settings version, custom field values, abandoned reason | links Customer, Vehicle, Location; has Photos, Tasks, Payments, Incidents, Overrides, Handover confirmation |
 | Photo | id, type (check-in/return/parking spot/incident/override), storage (Drive / object storage), file reference, timestamp, taken by, deleted at | belongs to Ticket, Incident or Override |
 | Handover confirmation | id, result (no damage / damage reported), method (ticket page tap / signature on attendant device), signature file reference, timestamp | belongs to Ticket (one per ticket) |
 | Task | id, type (park/retrieve/move), status, assigned to, timestamps | belongs to Ticket |
 | Tariff | id, type, rates, free minutes, daily cap, valid from/to | belongs to Location |
-| Payment | id, amount (may be 0), zero-fee reason, tax, tip, tip recipient (attendant or pool), method, gateway ref, status | belongs to Ticket |
+| Payment | id, amount (may be 0), zero-fee reason, tax, tip, tip recipient (attendant or pool), method (payment QR / cash / card terminal / none), transaction reference, verification status (pending / verified / rejected), verified by | belongs to Ticket |
+| Payment QR | id, locations (list or "all"), image file reference, payee name, status (pending approval / approved / rejected), uploaded by, approved by | belongs to Operator |
+| Ticket movement | id, type (out / return), time, attendant, parking spot | belongs to Ticket (in-and-out tickets) |
 | Merchant | id, name, locations, allowed discount types and values, minimum bill, monthly cap, can request cars | belongs to Operator; has validator Users and Validations |
 | Validation | id, merchant, validated by, rule type, bill amount, discount value | applied to Ticket |
 | Handover override | id, supervisor, ID document type, ID last 4 characters, timestamp | belongs to Ticket; has Photo |
@@ -645,6 +666,9 @@ stateDiagram-v2
     AssignedInTransit --> ReadyForPickup: car at pickup point
     ReadyForPickup --> Parked: supervisor re-parks (no-show)
     ReadyForPickup --> Closed: settled, confirmed, handed over
+    ReadyForPickup --> Out: in-and-out handover
+    Out --> CheckedIn: guest returns
+    Out --> Closed: stay ends
     Closed --> [*]
     Cancelled --> [*]
     Abandoned --> [*]
@@ -653,11 +677,12 @@ stateDiagram-v2
     RetrievalRequested: Retrieval requested
     AssignedInTransit: Assigned / in transit
     ReadyForPickup: Ready for pickup
+    Out: Out (in-and-out)
 ```
 
 1. **Checked in** — ticket created at drop-off; details (and photos, if enabled) captured.
 2. **Parked** — parking spot recorded by the location's capture method; in zone/slot mode the slot is marked occupied; park task closed.
-3. **Retrieval requested** — guest, merchant or staff requests the car (or a scheduled time arrives).
+3. **Retrieval requested** — guest, merchant or staff requests the car (or a scheduled or arrival-time request is released to the queue).
 4. **Assigned / In transit** — an attendant accepted the task and is bringing the car.
 5. **Ready for pickup** — car at the pickup point; guest notified.
 6. **Closed** — balance settled (paid, nothing due per FR-PAY-12, or supervisor-approved per FR-PAY-14), handover confirmed or damage reported (FR-OUT-13, FR-OUT-14), and car handed over; slot freed. Photos and GPS location are deleted when the guest link expires (FR-DATA-08).
@@ -666,7 +691,8 @@ Other transitions:
 
 - A retrieval request cancelled by the guest before an attendant accepts it returns the ticket to Parked (FR-OUT-08).
 - A car not collected at the pickup point can be returned to a parking spot by a supervisor (FR-OUT-09); the ticket returns to Parked.
-- An overdue vehicle can be marked **Abandoned** by a manager (FR-ADM-10); the ticket ends and the parking spot is freed.
+- An overdue vehicle can be marked **Abandoned** by a manager once the abandoned vehicle process is complete (FR-ADM-10, FR-ADM-12); the ticket ends and the parking spot is freed.
+- On an in-and-out ticket, handover moves the ticket to **Out** instead of Closed; when the guest returns it goes back to Checked in, and it closes when the stay ends (FR-OUT-16, FR-OUT-17).
 
 ### 6.3 Data retention
 
@@ -683,14 +709,15 @@ On connection (FR-DATA-01), VPS creates one root folder per operator, in My Driv
 <Root folder, default "<App name> – <Operator name>">/
 ├── Config                          spreadsheet: Operator settings, Branding, Locations,
 │                                   Location settings, Custom profiles, Custom fields, Zones,
-│                                   Slots, Pickup points, Tariffs, Merchants, Users, Roles,
+│                                   Slots, Pickup points, Tariffs, Merchants, Payment QRs, Users, Roles,
 │                                   Role assignments, Templates
 ├── Guest data <yyyy-mm>            spreadsheet: Customers, Vehicles
 │                                   (one per month; deleted whole at end of retention)
 ├── Audit log <yyyy-mm>             spreadsheet: Audit log
 ├── <Location name>/
 │   ├── Transactions <yyyy-mm>      spreadsheet: Tickets, Tasks, Payments, Validations,
-│   │                               Incidents, Handover overrides, Handover confirmations, Shifts
+│   │                               Incidents, Handover overrides, Handover confirmations,
+│   │                               Ticket movements, Shifts
 │   ├── Photos/<ticket>/            only when Drive is the photo storage; deleted per FR-DATA-08
 │   ├── Signatures/<yyyy-mm>/       handover signatures; deleted at end of retention
 │   └── Reports/                    CSV and PDF reports, incident PDFs
@@ -705,7 +732,7 @@ On connection (FR-DATA-01), VPS creates one root folder per operator, in My Driv
 
 ## 7. Use cases
 
-Six use cases cover the core guest journey, client setup and role management; each lists actor, preconditions, main flow and the main exceptions.
+Seven use cases cover the core guest journey, client setup, role management and hotel in-and-out stays; each lists actor, preconditions, main flow and the main exceptions.
 
 ### UC-01 Drop off vehicle
 
@@ -717,7 +744,7 @@ Six use cases cover the core guest journey, client setup and role management; ea
   3. Where photos are on, attendant captures the vehicle photos; where the damage diagram is on, notes damage (FR-IN-03, FR-IN-04).
   4. Attendant records key tag; system issues ticket and sends the link and handover PIN (FR-IN-05, FR-IN-02).
   5. Attendant parks the car and records the parking spot with the items switched on for the location: types the landmark or spot, captures GPS, takes a spot photo, and/or picks zone and slot, completing every required item. The park task closes (FR-PARK-02, FR-PARK-08, FR-PARK-10, FR-PARK-11, FR-PARK-07).
-- **Exceptions:** No network → ticket issued from the device's reserved number block, printed, and synced on reconnect; the SMS is sent after sync (FR-IN-10, FR-IN-06, NFR-AVL-02). Guest declines to give a number → printed ticket only; the guest later requests the car at the valet desk (FR-OUT-03). GPS weak or unavailable (e.g. basement) → text field shown and required instead (FR-PARK-08). Slot conflict found on sync (zone/slot mode) → supervisor alerted (FR-PARK-04). Prepaid location → guest pays at check-in (FR-PAY-10).
+- **Exceptions:** No network → ticket issued from the device's reserved number block, printed, and synced on reconnect; the SMS is sent after sync (FR-IN-10, FR-IN-06, NFR-AVL-02). Guest declines to give a number → printed ticket only; the guest later requests the car at the valet desk (FR-OUT-03). GPS weak or unavailable (e.g. basement) → text field shown and required instead (FR-PARK-08). Slot conflict found on sync (zone/slot mode) → supervisor alerted (FR-PARK-04). Prepaid location → guest pays by payment QR or cash at check-in (FR-PAY-10). Hotel guest returning on an in-and-out ticket → attendant scans the existing ticket instead of creating a new one (FR-OUT-17).
 - **Postcondition:** Ticket in state Parked; parking spot recorded.
 
 ### UC-02 Request vehicle
@@ -725,11 +752,11 @@ Six use cases cover the core guest journey, client setup and role management; ea
 - **Actor:** Customer (or merchant validator)
 - **Precondition:** Ticket in state Parked.
 - **Main flow:**
-  1. Guest opens the ticket link, chooses a pickup point and taps "Request my car" (FR-OUT-01).
-  2. System shows the fee and, where online payment is on, offers payment (FR-PAY-02, FR-PAY-03).
-  3. System adds the task to the queue and notifies attendants (FR-TASK-01, FR-NOT-02).
+  1. Before reaching the pickup point, the guest opens the ticket link, chooses a pickup point and either taps "Request my car" or picks "I'll arrive in…" (e.g. 10 minutes) (FR-OUT-01, FR-OUT-15).
+  2. System shows the fee and, where payment QR is used, the operator's payment QR; the guest pays from their own app and enters the transaction reference (FR-PAY-02, FR-PAY-03).
+  3. System adds the task to the queue, timed so the car is ready when the guest arrives, and notifies attendants (FR-TASK-01, FR-NOT-02, FR-OUT-15).
   4. Guest sees live status and ETA (FR-OUT-04).
-- **Exceptions:** Payment fails → guest can pay at handover. Guest cancels before an attendant accepts → ticket returns to Parked and the fee clock keeps running (FR-OUT-08, FR-PAY-02). Guest has a printed ticket → staff create the request (FR-OUT-03). Restaurant guest asks for the bill → the host validates the ticket and requests the car (FR-PAY-13, FR-OUT-12).
+- **Exceptions:** Guest does not pay in advance → pays by payment QR or cash at handover. Guest is delayed or early → changes the arrival time or taps "I'm here" (FR-OUT-15). Guest cancels before an attendant accepts → ticket returns to Parked and the fee clock keeps running (FR-OUT-08, FR-PAY-02). Guest has a printed ticket → staff create the request (FR-OUT-03). Restaurant guest asks for the bill → the host validates the ticket and requests the car (FR-PAY-13, FR-OUT-12).
 
 ### UC-03 Retrieve and hand over vehicle
 
@@ -739,10 +766,10 @@ Six use cases cover the core guest journey, client setup and role management; ea
   1. Attendant accepts the task and sees the parking spot (text, spot photo, map pin with walking directions, or zone/slot), key tag and any vehicle photos (FR-TASK-02, FR-TASK-06, FR-PARK-09).
   2. Attendant drives the car to the pickup point and marks it Ready; guest notified (FR-OUT-05).
   3. Attendant verifies the guest by QR scan or handover PIN (FR-OUT-06).
-  4. Attendant collects payment if a balance is due and, where photos are on, captures return photos (FR-PAY-04, FR-PAY-12, FR-OUT-07).
+  4. If a balance is due, attendant checks that the guest's QR payment has been verified or collects cash; where photos are on, captures return photos (FR-PAY-04, FR-PAY-12, FR-PAY-16, FR-OUT-07).
   5. Guest checks the car and taps "Car received, no damage" on the ticket page, or signs on the attendant's device (FR-OUT-13).
   6. Attendant hands over the key and the ticket closes.
-- **Exceptions:** Task not accepted in time → supervisor alerted (FR-TASK-05). Verification fails → supervisor override with ID record and photo (FR-OUT-10). Guest does not arrive → supervisor may return the car to a parking spot (FR-OUT-09). Balance due and payment required before handover → supervisor approval needed to close (FR-PAY-14). Guest reports damage instead of confirming → incident opened, photos kept, handover completed (FR-OUT-14).
+- **Exceptions:** Task not accepted in time → supervisor alerted (FR-TASK-05). Verification fails → supervisor override with ID record and photo (FR-OUT-10). Guest does not arrive → supervisor may return the car to a parking spot (FR-OUT-09). Balance due and payment required before handover → supervisor approval needed to close (FR-PAY-14). Guest reports damage instead of confirming → incident opened, photos kept, handover completed (FR-OUT-14). In-and-out ticket → the ticket moves to Out instead of closing (FR-OUT-16).
 - **Postcondition:** Ticket Closed with handover confirmation recorded; parking spot free; receipt sent (FR-PAY-07); photos and GPS location deleted when the guest link expires (FR-DATA-08).
 
 ### UC-04 Report damage
@@ -765,7 +792,7 @@ Six use cases cover the core guest journey, client setup and role management; ea
   5. Operator admin creates a location and chooses a service profile, e.g. Restaurant (FR-CFG-01).
   6. Operator admin reviews the location's settings and changes any that differ, e.g. parking spot capture method, vehicle photos, minimum bill for free valet, closing time (FR-CFG-02, FR-CFG-04).
   7. If photos are on, operator admin keeps Google Drive as the photo storage or connects an object storage bucket (FR-DATA-07).
-  8. Operator admin adds custom fields, pickup points, tariffs, merchants and staff with their roles, and zones if using zone/slot mode (FR-CFG-03, FR-ADM-01, FR-PAY-11, FR-AUTH-03).
+  8. Operator admin uploads the payment QR for platform admin approval (FR-PAY-15), sets the abandoned vehicle process for the jurisdiction (FR-ADM-12), and adds custom fields, pickup points, tariffs, merchants and staff with their roles, and zones if using zone/slot mode (FR-CFG-03, FR-ADM-01, FR-PAY-11, FR-AUTH-03).
   9. Operator admin previews the guest ticket and printed ticket and activates the location (FR-CFG-08).
 - **Exceptions:** Google consent declined or revoked → location cannot be activated; admin is shown how to reconnect (FR-DATA-04). Storage nearly full → warning shown (FR-DATA-05).
 - **Postcondition:** Operator branded and connected; location active with its settings version 1 recorded (FR-CFG-06).
@@ -782,14 +809,33 @@ Six use cases cover the core guest journey, client setup and role management; ea
 - **Exceptions:** Admin tries to grant a permission they do not hold, or to remove the last operator admin → blocked with an explanation (FR-ROLE-04). Platform support needs to see guest data → operator admin grants time-limited access (FR-ROLE-07).
 - **Postcondition:** Role and assignment changes logged in the audit trail (FR-ADM-05).
 
+### UC-07 Hotel in-and-out stay
+
+- **Actor:** Valet attendant (primary), Customer (hotel guest)
+- **Precondition:** In-and-out privileges on; ticket created with the guest's stay end date.
+- **Main flow:**
+  1. Guest requests the car (UC-02); attendant verifies the guest and hands it over; the ticket moves to Out and the parking spot is freed (FR-OUT-16).
+  2. Guest returns; attendant scans the existing ticket QR and records a new parking spot and photos per the location's settings; the ticket goes back to Parked (FR-OUT-17).
+  3. Steps 1–2 repeat during the stay; each exit and return is logged.
+  4. At the end of the stay, the guest pays for the whole stay by payment QR or cash, confirms the handover, and the ticket closes (FR-OUT-17, FR-PAY-02, FR-PAY-16).
+- **Exceptions:** Stay end date passes with the car still parked → overdue process (FR-ADM-08). Stay end date passes with the car out → ticket closes automatically and any balance is shown as due (FR-OUT-17).
+- **Postcondition:** Ticket Closed; photos deleted when the guest link expires (FR-DATA-08).
+
 ## 8. Open questions
 
-- [ ] Which payment gateway and SMS provider will be used in the first market?
-- [ ] Is a native app required for customers in v1.0, or is the web ticket page enough?
-- [ ] Do any clients need the attendant app listed in the app stores under their own name and icon (separate white-label builds), or is in-app branding after login enough?
-- [ ] Should licence-plate recognition be planned for v2.0?
-- [ ] What is the legally required retention period for vehicle photos in the target jurisdictions, and is 7 days after handover long enough for insurers?
-- [ ] Is integration with hotel property-management systems (room charge) required?
-- [ ] What legal process (notice period, towing, release to owner) applies to abandoned vehicles in the target jurisdictions?
-- [ ] Do hotel guests need in-and-out privileges (taking the car out and back on one ticket) in v1.0?
-- [ ] At what client volume should the move from Google Sheets to a relational database (NFR-SCAL-03) be planned?
+No open questions remain for v1.0. New questions found during design will be added here.
+
+### Resolved in v1.6
+
+| Question | Decision |
+| --- | --- |
+| SMS / WhatsApp provider | Platform default provider at launch (e.g. MSG91), or each client's own provider account (FR-NOT-05). |
+| Native customer app | Not in v1.0; the ticket web page (PWA) opened from the SMS link is enough. |
+| Licence-plate recognition (reading the plate automatically with the phone camera) | Planned for v2.0; plates are typed in v1.0. |
+| Hotel property-management system integration (fee added to the room bill) | Not in v1.0; hotel guests pay by payment QR or cash. |
+| Payment gateway | None in v1.0. Guests pay by the client's own payment QR, approved by a platform admin, with each payment verified manually, or in cash (FR-PAY-03, FR-PAY-15, FR-PAY-16). |
+| White-label app-store builds | Not needed; in-app branding after login (section 2.8). |
+| Photo retention | 7 days after handover, configurable (FR-DATA-08). |
+| Abandoned vehicle legal process | Configured per client to match the state or jurisdiction (FR-ADM-12). |
+| Hotel in-and-out privileges | Included in v1.0 (FR-OUT-16, FR-OUT-17). |
+| When to move off Google Sheets | No fixed volume; email alerts to the master admin and the client when Google Sheets limits are near (FR-DATA-12). |
