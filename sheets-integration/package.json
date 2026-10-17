@@ -1,0 +1,29 @@
+{
+  "name": "@valet/sheets-integration",
+  "version": "0.1.0",
+  "description": "Google Sheets and Excel data layer for the Valet Parking System (SRS v1.6)",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "template": "npm run build && node dist/scripts/build-template.js",
+    "setup:google": "npm run build && node --env-file-if-exists=.env dist/scripts/setup-google.js",
+    "export:excel": "npm run build && node --env-file-if-exists=.env dist/scripts/export-excel.js",
+    "import:excel": "npm run build && node --env-file-if-exists=.env dist/scripts/import-excel.js"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "googleapis": "144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
+  }
+}
