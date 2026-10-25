@@ -2,7 +2,8 @@
 # GitHub Actions (.github/workflows/deploy.yml) deploys after the tests pass, so auto-deploy is off.
 services:
   - type: web
-    name: valet-parking
+    # Live at https://valetpay.onrender.com
+    name: valetpay
     runtime: node
     plan: free
     region: singapore
@@ -20,8 +21,12 @@ services:
       - key: PIN_HMAC_SECRET
         generateValue: true
       # Test environment until go-live: demo users, two parked cars and the Test credentials panel.
+      # Render sets NODE_ENV=production for Node services by default, and the server refuses to
+      # start in production with SEED_DEMO=true, so the test environment says so explicitly.
       # At go-live follow the README "Go-live checklist": NODE_ENV=production, SEED_DEMO=false,
       # a disk with DATA_DIR=/var/data, and STAFF_USERS_FILE (a Secret File) with the first admin.
+      - key: NODE_ENV
+        value: development
       - key: SEED_DEMO
         value: "true"
       - key: SMS_PROVIDER
