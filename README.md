@@ -8,7 +8,7 @@ The same product can be configured for paid parking operators, restaurants, hote
 
 | Folder | What it is |
 | --- | --- |
-| [`docs/`](docs/SRS.md) | Software Requirements Specification |
+| [`docs/`](docs/SRS.md) | Software Requirements Specification, and [all test credentials](docs/TEST-CREDENTIALS.md) |
 | [`sheets-integration/`](sheets-integration/README.md) | Google Sheets and Excel data layer: schema, business rules, write queue, Excel template |
 | `server/` | Express API: staff sign-in and roles, guest ticket endpoints, photo uploads |
 | `web/` | React web app: attendant app, admin settings, payment verification and the guest ticket page |
@@ -23,7 +23,7 @@ npm run build        # data layer, server and web app
 npm start            # http://localhost:8080 with demo data in memory
 ```
 
-Open `http://localhost:8080/login`. Until go-live, the sign-in page shows a **Test credentials** panel with every demo staff login (password `valet123` for all), a **Use** button to fill in the form, and the guest page link and handover PIN of each open ticket. The demo has three locations (a restaurant, a paid car park and a hotel) and starts with two parked cars.
+Open `http://localhost:8080/login`. Until go-live, the sign-in page shows a **Test credentials** panel with every demo staff login (password `valet123` for all), a **Use** button to fill in the form, and the guest page link and handover PIN of each open ticket. The demo has three locations (a restaurant, a paid car park and a hotel) and starts with two parked cars. All test logins are listed in [docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md).
 
 The panel and demo data only exist in demo mode. With `NODE_ENV=production` they are switched off, and the server refuses to start if `SEED_DEMO=true`.
 
