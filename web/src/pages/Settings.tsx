@@ -1,6 +1,8 @@
+import { Check, Copy } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { SmsSettingsCard } from '../components/SmsSettingsCard';
+import { VehicleListEditor } from '../components/VehicleListEditor';
 import { useAction, usePolling } from '../hooks';
 import { readAsDataUrl } from '../image';
 import { useSession } from '../session';
@@ -50,7 +52,8 @@ export function SettingsPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!s) return;
-    const { paymentQr: _qr, ...changes } = s;
+    // The payment QR and the vehicle list have their own cards and saves.
+    const { paymentQr: _qr, vehicleCatalogue: _vehicles, ...changes } = s;
     const res = await save.run(() => api<LocationSettings>(`/locations/${locationId}/settings`, { method: 'PUT', body: changes }));
     if (res) {
       loaded.setData(res);
@@ -203,6 +206,7 @@ export function SettingsPage() {
         </button>
       </form>
 
+      <VehicleListCard key={locationId} locationId={locationId} current={s.vehicleCatalogue} onSaved={(next) => loaded.setData(next)} />
       {can('sms.configure') && <SmsSettingsCard />}
       {can('payment_qr.upload') && <PaymentQrCard locationId={locationId} current={loaded.data?.paymentQr} onSaved={(next) => loaded.setData(next)} />}
       {can('locations.manage') && (
@@ -213,6 +217,63 @@ export function SettingsPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function VehicleListCard({ locationId, current, onSaved }: { locationId: string; current: LocationSettings['vehicleCatalogue']; onSaved: (s: LocationSettings) => void }) {
+  const { location, locations } = useSession();
+  const [list, setList] = useState(current);
+  const [message, setMessage] = useState<string | null>(null);
+  const { busy, error, run } = useAction();
+  const changed = JSON.stringify(list) !== JSON.stringify(current);
+  const others = locations.filter((l) => l.id !== locationId);
+
+  const edit = (next: typeof list) => {
+    setMessage(null);
+    setList(next);
+  };
+
+  async function saveHere() {
+    const res = await run(() => api<LocationSettings>(`/locations/${locationId}/settings`, { method: 'PUT', body: { vehicleCatalogue: list } }));
+    if (res) {
+      onSaved(res);
+      setMessage(`Saved for ${location?.name ?? 'this location'}.`);
+    }
+  }
+
+  async function saveEverywhere() {
+    const ok = await run(async () => {
+      for (const l of [locationId, ...others.map((o) => o.id)]) {
+        const res = await api<LocationSettings>(`/locations/${l}/settings`, { method: 'PUT', body: { vehicleCatalogue: list } });
+        if (l === locationId) onSaved(res);
+      }
+      return true;
+    });
+    if (ok) setMessage(`Saved for all ${others.length + 1} locations.`);
+  }
+
+  return (
+    <div className="card stack">
+      <div>
+        <h2 style={{ marginBottom: 4 }}>Vehicle list</h2>
+        <p className="muted" style={{ margin: 0 }}>
+          Attendants choose the make, model and colour from these lists at check-in instead of typing them.
+        </p>
+      </div>
+      <VehicleListEditor value={list} onChange={edit} />
+      {error && <div className="notice error">{error}</div>}
+      {message && !changed && <div className="notice ok">{message}</div>}
+      <div className="row">
+        <button type="button" className="primary" disabled={busy || !changed} onClick={() => void saveHere()}>
+          <Check size={18} aria-hidden /> Save vehicle list
+        </button>
+        {others.length > 0 && (
+          <button type="button" disabled={busy} onClick={() => void saveEverywhere()}>
+            <Copy size={18} aria-hidden /> Save for all {others.length + 1} locations
+          </button>
+        )}
+      </div>
     </div>
   );
 }

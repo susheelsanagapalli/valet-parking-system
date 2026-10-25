@@ -63,10 +63,14 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
 
   const gpsWeak = gps !== null && gps.accuracyM > settings.gpsMinAccuracyM;
   const gpsMissing = settings.spotGps !== 'off' && (gps === null || gpsWeak);
-  // FR-PARK-08: weak or missing GPS makes the text field required, even when it is switched off.
-  const gpsFallback = gpsMissing && (settings.spotGps === 'required' || gps !== null || gpsState === 'failed');
+  // FR-PARK-08: a GPS attempt that failed or came back weak makes the text field required, even when
+  // it is switched off. It only appears once GPS has been tried, so a switched-off field stays hidden
+  // whenever GPS works.
+  const gpsFallback = gpsMissing && gpsState !== 'locating' && (gps !== null || gpsState === 'failed');
   const textRequired = settings.spotText === 'required' || gpsFallback;
   const showText = settings.spotText !== 'off' || gpsFallback;
+  // Required GPS must at least be tried before saving; if it fails, the text field takes over.
+  const mustTryGps = settings.spotGps === 'required' && gps === null && gpsState !== 'failed';
 
   /**
    * Watches the position for up to GPS_WAIT_MS and keeps the most accurate reading, stopping early
@@ -206,7 +210,8 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
       {settings.spotPhoto !== 'off' && <PhotoPicker label={`Spot photo${mark(settings.spotPhoto)}`} max={1} onChange={(refs) => setPhoto(refs[0])} />}
 
       {error && <div className="notice error">{error}</div>}
-      <button className="primary big" type="submit" disabled={busy}>
+      {mustTryGps && gpsState !== 'locating' && <p className="muted" style={{ margin: 0 }}>Capture the GPS location first.</p>}
+      <button className="primary big" type="submit" disabled={busy || mustTryGps}>
         <Check size={22} aria-hidden />
         {busy ? 'Saving…' : submitLabel}
       </button>

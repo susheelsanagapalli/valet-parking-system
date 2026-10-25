@@ -145,6 +145,12 @@ const settingsPatch = z
       freeMinutes: z.number().min(0),
       dailyCap: z.number().positive().optional(),
     }),
+    // Sizes are capped here before anything else looks at them; the data layer checks names and duplicates.
+    vehicleCatalogue: z.object({
+      makes: z.array(z.object({ name: z.string().max(40), models: z.array(z.string().max(40)).max(100) })).max(100),
+      colours: z.array(z.string().max(40)).max(50),
+      allowOther: z.boolean(),
+    }),
   })
   .partial()
   .strict();
@@ -244,6 +250,10 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
         sms: deps.notifier?.recent().slice(0, 15) ?? [],
       };
     });
+  } else {
+    // The sign-in page always asks; answering "off" (instead of the 401 for an unknown path) keeps
+    // the production console free of errors and still reveals nothing.
+    pub('GET', '/demo/credentials', () => ({ enabled: false }));
   }
 
   // Guest ticket page, by the unguessable QR token (NFR-SEC-02).
@@ -448,7 +458,7 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
         colour: z.string().max(30).optional(),
         vehiclePhotoRefs: z.array(z.string()).max(8).optional(),
         stayEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        customFields: z.record(z.unknown()).optional(),
+        customFields: z.record(z.string(), z.unknown()).optional(),
       }),
       ctx.body,
     );

@@ -118,11 +118,16 @@ Sign in as an `operator_admin`:
 | App name shown to guests and in SMS (e.g. "MallValet") | **Settings → New location → App name**, set per location when it is created |
 | Ticket number prefix (e.g. `PM` gives PM0001) | **Settings → New location → Ticket prefix** |
 | Parking spot capture: text, GPS, photo (off, optional, required), zone/slot list, GPS accuracy needed | **Settings → Parking spot** |
+| Vehicle makes, models of each make, and colours that attendants pick from at check-in; whether "Other…" may be typed | **Settings → Vehicle list** (**Save for all locations** copies it everywhere) |
 | Vehicle photos, guest damage confirmation, "I'll arrive in…" options, pickup points, average retrieval time | **Settings** |
 | Tariff (complimentary, flat, hourly with free minutes and daily cap) and payment methods | **Settings → Charges and payment** |
 | The client's own UPI payment QR (approved by a platform admin before guests see it) | **Settings → Payment QR** |
 | SMS sender number | **Settings → Guest SMS** |
 | Staff accounts, roles (built-in or custom) and which locations each person can use | **Staff** (see [Staff accounts and roles](#staff-accounts-and-roles)) |
+
+Attendants only see the fields a location switches on: a field set to **Off** never appears, **Optional** fields are marked "(optional)" and **Required** ones have a `*`. This applies to the parking spot text, GPS, spot photo and zone/slot, vehicle photos, and the stay end date (hotels with in-and-out). One deliberate exception: when GPS is on but gives no usable reading, the spot description appears even if it is switched off, so a car is never parked without a usable location (SRS FR-PARK-08).
+
+Each new location starts with a list of common makes and models in India and 11 colours, with "Other…" allowed. Switch "Other…" off to make attendants pick only from the list; the server then refuses anything else too.
 
 Settings changes apply to new tickets; cars already checked in keep the rules they arrived with. The app name and ticket prefix can't be changed after a location is created yet; create a new location instead.
 

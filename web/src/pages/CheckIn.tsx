@@ -1,10 +1,11 @@
 import QRCode from 'qrcode';
-import { CalendarDays, Car, CheckCircle2, ExternalLink, Hash, KeyRound, MapPin, Palette, Phone, Plus, Printer, Ticket, User } from 'lucide-react';
+import { CalendarDays, Car, CheckCircle2, ExternalLink, Hash, KeyRound, MapPin, Phone, Plus, Printer, Ticket, User } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { PhotoPicker } from '../components/PhotoPicker';
 import { SendSmsButton, type SmsDraft } from '../components/SendSmsButton';
 import { SpotForm } from '../components/SpotForm';
+import { VehicleFields } from '../components/VehicleFields';
 import { spotDescription } from '../components/TicketSummary';
 import { useAction, usePolling } from '../hooks';
 import { useSession } from '../session';
@@ -19,8 +20,6 @@ interface CheckInResult {
 }
 
 const EMPTY = { plateNumber: '', keyTag: '', guestMobile: '', guestName: '', make: '', model: '', colour: '', stayEndDate: '' };
-const COLOURS = ['White', 'Black', 'Silver', 'Grey', 'Red', 'Blue', 'Brown', 'Green'];
-const MAKES = ['Maruti Suzuki', 'Hyundai', 'Tata', 'Mahindra', 'Toyota', 'Honda', 'Kia', 'MG', 'Skoda', 'Volkswagen', 'BMW', 'Mercedes-Benz'];
 
 export function CheckInPage() {
   const { location } = useSession();
@@ -188,32 +187,12 @@ export function CheckInPage() {
           </span>
           <input value={form.guestName} onChange={set('guestName')} />
         </label>
-        <label>
-          <span className="label-text">
-            <Car size={16} aria-hidden /> Make
-          </span>
-          <input value={form.make} onChange={set('make')} list="makes" />
-          <datalist id="makes">
-            {MAKES.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </label>
-        <label>
-          Model
-          <input value={form.model} onChange={set('model')} placeholder="e.g. Swift, Creta" />
-        </label>
-        <label>
-          <span className="label-text">
-            <Palette size={16} aria-hidden /> Colour
-          </span>
-          <select value={form.colour} onChange={set('colour')}>
-            <option value="">—</option>
-            {COLOURS.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        </label>
+        <VehicleFields
+          key={photoKey}
+          catalogue={settings.vehicleCatalogue}
+          value={{ make: form.make, model: form.model, colour: form.colour }}
+          onChange={(v) => setForm({ ...form, ...v })}
+        />
       </div>
       {settings.vehiclePhotos !== 'off' && (
         <PhotoPicker

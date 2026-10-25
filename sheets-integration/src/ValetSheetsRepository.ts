@@ -4,7 +4,7 @@ import { KeyedMutex } from './KeyedMutex.js';
 import { validateRow, type Row } from './rows.js';
 import { TABS, tab, type TabDef } from './schema.js';
 import { hashPin, maskMobile, newHandoverPin, newId, newQrToken, normalizePlate, safeEqual, verifyPin } from './security.js';
-import { resolveSettings, validateSettings, type LocationSettings } from './settings.js';
+import { CATALOGUE_DEFAULTS, resolveSettings, validateSettings, vehicleProblem, type LocationSettings } from './settings.js';
 import type { SheetStore } from './store/SheetStore.js';
 import type {
   AuditLogRow,
@@ -277,7 +277,8 @@ export class ValetSheetsRepository {
     const wanted = version ?? location.settings_version;
     const row = this.all<LocationSettingsRow>('LocationSettings').find((s) => s.location_id === locationId && s.version === wanted);
     if (!row) throw new ValetError('NOT_FOUND', `Settings version ${wanted} for location ${locationId} not found`);
-    return structuredClone(row.settings);
+    // Settings saved before a setting existed get its default, so older locations keep working.
+    return structuredClone({ ...CATALOGUE_DEFAULTS, ...row.settings });
   }
 
   /** Saves a new settings version; open tickets keep the version they were checked in with (FR-CFG-06). */
@@ -307,6 +308,8 @@ export class ValetSheetsRepository {
     const plate = normalizePlate(input.plateNumber ?? '');
     if (!plate) throw new ValetError('INVALID_INPUT', 'Plate number is required');
     if (!input.keyTag?.trim()) throw new ValetError('INVALID_INPUT', 'Key tag is required (FR-IN-05)');
+    const vehicleIssue = vehicleProblem(settings.vehicleCatalogue, input);
+    if (vehicleIssue) throw new ValetError('INVALID_INPUT', vehicleIssue);
     const photos = input.vehiclePhotoRefs ?? [];
     if (settings.vehiclePhotos === 'off' && photos.length > 0) throw new ValetError('INVALID_INPUT', 'Vehicle photos are switched off for this location');
     if (settings.vehiclePhotos === 'required' && photos.length < settings.vehiclePhotoCount) {

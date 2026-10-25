@@ -94,7 +94,9 @@ export function TestCredentials({ onUse }: { onUse: (username: string, password:
   const load = async () => {
     setLoading(true);
     try {
-      setData(await api<DemoCredentials>('/demo/credentials', { auth: false }));
+      // Outside demo mode the server answers { enabled: false } and the panel stays hidden.
+      const res = await api<DemoCredentials | { enabled: false }>('/demo/credentials', { auth: false });
+      setData('password' in res ? res : null);
     } catch {
       setData(null);
     } finally {
