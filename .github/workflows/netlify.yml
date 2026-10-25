@@ -1,0 +1,64 @@
+name: Deploy demo to Netlify
+
+# Publishes the in-browser demo to https://valetpay-demo.netlify.app on every push to main, after the
+# tests pass. Needs the repository secrets NETLIFY_AUTH_TOKEN (a Netlify personal access token) and
+# NETLIFY_SITE_ID; without them the publish step is skipped with a notice.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netlify
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    env:
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+    steps:
+      - name: Check Netlify secrets
+        id: secrets
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "::notice::NETLIFY_AUTH_TOKEN or NETLIFY_SITE_ID is not set; skipping the Netlify deploy."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.secrets.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v6
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - if: steps.secrets.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Build the demo for the site root
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VITE_BASE: /
+          VITE_PREVIEW: 'true'
+        run: npm run build -w sheets-integration && npm run build -w web
+
+      # Netlify serves files only; send every other path (e.g. /staff, /t/<token>) to the app.
+      - if: steps.secrets.outputs.ready == 'true'
+        run: echo '/*    /index.html   200' > web/dist/_redirects
+
+      - name: Publish to Netlify
+        if: steps.secrets.outputs.ready == 'true'
+        run: npx --yes netlify-cli@17.38.1 deploy --prod --dir web/dist --site "$NETLIFY_SITE_ID" --message "${GITHUB_SHA::7}"
