@@ -1,12 +1,12 @@
 name: Deploy web app to GitHub Pages
 
-# Publishes the web app (screens) to https://<owner>.github.io/<repository>/ on every push to main.
+# Publishes the web app (screens) to https://<owner>.github.io/<repository>/ on every push to the demo branch.
 # GitHub Pages cannot run the Valet server. Set the repository variable VALET_API_URL to a running
 # server's address (and CORS_ORIGINS on that server) to make the Pages site fully working; without it
 # the site shows a preview notice.
 on:
   push:
-    branches: [main]
+    branches: [demo]
   workflow_dispatch:
 
 permissions:

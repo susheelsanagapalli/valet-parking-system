@@ -1,11 +1,11 @@
 name: Deploy demo to Netlify
 
-# Publishes the in-browser demo to https://valetpay-demo.netlify.app on every push to main, after the
+# Publishes the in-browser demo to https://valetpay-demo.netlify.app on every push to the demo branch, after the
 # tests pass. Needs the repository secrets NETLIFY_AUTH_TOKEN (a Netlify personal access token) and
 # NETLIFY_SITE_ID; without them the publish step is skipped with a notice.
 on:
   push:
-    branches: [main]
+    branches: [demo]
   workflow_dispatch:
 
 permissions:

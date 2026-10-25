@@ -53,9 +53,29 @@ Phones only allow GPS and the live camera on secure (https) pages. Besides `http
 npm test             # data layer and API tests
 ```
 
+## Branches and releases
+
+The app code is the same everywhere; the branches decide where it is deployed:
+
+| Branch | What it is | Deploys to |
+| --- | --- | --- |
+| `main` | Reviewed, tested work. Pull requests merge here. | Nothing (tests only) |
+| `demo` | What prospects and testers see: demo mode with test logins ([docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md)) | https://valetpay-demo.netlify.app and GitHub Pages |
+| `production` | The live site: production mode, no test credentials | https://valetpay.onrender.com (Render) |
+
+To release, fast-forward the branch to `main` (or open a pull request from `main` into it):
+
+```bash
+git checkout demo && git merge --ff-only main && git push         # update the demo sites
+git checkout production && git merge --ff-only main && git push   # go live
+git checkout main
+```
+
+Try a change on `demo` before releasing it to `production`. Never commit straight to `demo` or `production`; fix things on `main` and release again, so the three branches never drift apart.
+
 ## Live demo on GitHub Pages
 
-The demo is published on every push to `main`, after the tests pass:
+The demo is published on every push to the `demo` branch, after the tests pass (see [Branches and releases](#branches-and-releases)):
 
 - **https://valetpay-demo.netlify.app**: the main demo address, published by `.github/workflows/netlify.yml`. It needs the repository secrets `NETLIFY_AUTH_TOKEN` (a Netlify personal access token) and `NETLIFY_SITE_ID`; without them the workflow skips publishing. New Netlify sites may have "team login" visitor protection on, so switch visitor access to public in the site settings, or only your team can open it.
 - **https://susheelsanagapalli.github.io/valet-parking-system/**: the same demo on GitHub Pages (`.github/workflows/pages.yml`).
@@ -66,7 +86,7 @@ To use the Pages site with a real server and shared data instead, set the reposi
 
 ## Deploy to Render with GitHub Actions
 
-Every push to `main` runs the tests and build (`.github/workflows/ci.yml`); if they pass, `.github/workflows/deploy.yml` deploys that commit to [Render](https://render.com) and waits until it is live. Pull requests only run the tests.
+Every push to the `production` branch runs the tests and build (`.github/workflows/ci.yml`); once they pass, Render deploys that commit by itself (`autoDeployTrigger: checksPass` in `render.yaml`). Pull requests and pushes to `main` only run the tests.
 
 One-time setup:
 
@@ -78,7 +98,7 @@ One-time setup:
    gh secret set RENDER_DEPLOY_HOOK_URL      # paste the Deploy Hook URL
    gh variable set RENDER_SERVICE_URL --body "https://valetpay.onrender.com"   # your service URL
    ```
-5. Push to `main` (or run **Deploy to Render** from the Actions tab).
+5. Push to the `production` branch (see [Branches and releases](#branches-and-releases)).
 
 The deployed site has a real https address, so GPS, the live QR camera and Google sign-in work on phones with nothing to install. For Google Sheets, add `https://<your-service>.onrender.com/api/google/callback` as an authorised redirect URI on the Google OAuth client, then connect on the site's **Data** page.
 
@@ -109,7 +129,7 @@ Limits to know before go-live: messages cost whatever your SIM plan charges and 
 
 Every client (operator) gets **their own deployment**: their own Render service, their own staff accounts, and their own Google account holding their data. Nothing is shared between clients, so one client can never see another's cars, guests or payments. Inside one deployment, a client can run as many locations as they like (for example three restaurants and a hotel).
 
-To add a client: create a new Render service from this repository (**New → Blueprint**, give it a different name such as `valet-<client>`), then follow the [go-live checklist](#go-live-checklist) for that service. Every service runs the same code, so one push to `main` updates all clients.
+To add a client: create a new Render service from this repository (**New → Blueprint**, give it a different name such as `valet-<client>`), then follow the [go-live checklist](#go-live-checklist) for that service. Every service runs the same code, so one push to the `production` branch updates all clients.
 
 ### What each client can change in the app (no code)
 
@@ -151,7 +171,7 @@ A code change applies to every deployment built from that branch, so per-client 
 The GitHub Pages demo is one shared site for showing the product; never put real client data on it.
 
 - **For one sales meeting:** open the demo, sign in as `admin`, and create a location with the client's name, app name and ticket prefix under **Settings → New location**, then pick their service profile and tariff. This stays in that browser only, so do it on the device you present from. **Reset demo data** removes it.
-- **For everyone who opens the demo:** edit the demo locations and parked cars in `server/src/seedData.ts` (names, app name, ticket prefix, service profile, sample cars), then push to `main`. Visitors who opened the demo before keep their saved data until they press **Reset demo data**.
+- **For everyone who opens the demo:** edit the demo locations and parked cars in `server/src/seedData.ts` (names, app name, ticket prefix, service profile, sample cars), then release it to the `demo` branch. Visitors who opened the demo before keep their saved data until they press **Reset demo data**.
 
 ## Staff accounts and roles
 
