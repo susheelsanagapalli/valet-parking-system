@@ -15,7 +15,7 @@ The same product can be configured for paid parking operators, restaurants, hote
 
 ## Run it locally
 
-Requires Node.js 20 or later.
+Requires Node.js 20.19 or later (22 recommended).
 
 ```bash
 npm install
