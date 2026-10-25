@@ -1,10 +1,8 @@
 name: CI
 
-# Pushes to main run this through deploy.yml; pull requests run it on its own.
+# Pushes to demo and production run this through their deploy workflows; pull requests run it on its own.
 on:
-  # Tested on every pull request and every push to main; the demo and production deploys run it again.
-  push:
-    branches: [main]
+  # Tested on every pull request; pushes to demo and production run it from their deploy workflows.
   pull_request:
   workflow_call:
   workflow_dispatch:

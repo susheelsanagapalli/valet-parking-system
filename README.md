@@ -55,23 +55,21 @@ npm test             # data layer and API tests
 
 ## Branches and releases
 
-The app code is the same everywhere; the branches decide where it is deployed:
+The repository has two branches. The app code is the same in both; the branch decides where it is deployed:
 
 | Branch | What it is | Deploys to |
 | --- | --- | --- |
-| `main` | Reviewed, tested work. Pull requests merge here. | Nothing (tests only) |
-| `demo` | What prospects and testers see: demo mode with test logins ([docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md)) | https://valetpay-demo.netlify.app and GitHub Pages |
+| `demo` (default) | All work lands here through pull requests. Demo mode with test logins ([docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md)) | https://valetpay-demo.netlify.app and GitHub Pages |
 | `production` | The live site: production mode, no test credentials | https://valetpay.onrender.com (Render) |
 
-To release, fast-forward the branch to `main` (or open a pull request from `main` into it):
+Work on a short-lived branch, open a pull request into `demo`, and delete the branch once it is merged. Check the change on the demo site, then go live by fast-forwarding `production` to `demo`:
 
 ```bash
-git checkout demo && git merge --ff-only main && git push         # update the demo sites
-git checkout production && git merge --ff-only main && git push   # go live
-git checkout main
+git checkout production && git pull && git merge --ff-only origin/demo && git push
+git checkout demo
 ```
 
-Try a change on `demo` before releasing it to `production`. Never commit straight to `demo` or `production`; fix things on `main` and release again, so the three branches never drift apart.
+Never commit straight to `production`; fix things through `demo` and release again, so the two branches never drift apart.
 
 ## Live demo on GitHub Pages
 
@@ -86,7 +84,7 @@ To use the Pages site with a real server and shared data instead, set the reposi
 
 ## Deploy to Render with GitHub Actions
 
-Every push to the `production` branch runs the tests and build (`.github/workflows/ci.yml`); once they pass, Render deploys that commit by itself (`autoDeployTrigger: checksPass` in `render.yaml`). Pull requests and pushes to `main` only run the tests.
+Every push to the `production` branch runs the tests and build (`.github/workflows/ci.yml`); once they pass, Render deploys that commit by itself (`autoDeployTrigger: checksPass` in `render.yaml`). Pull requests only run the tests.
 
 One-time setup:
 
