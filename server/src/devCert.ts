@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { join } from 'node:path';
-import selfsigned from 'selfsigned';
+import { generate } from 'selfsigned';
 
 /**
  * HTTPS for testing on phones over the local network. Phones only give GPS and the live camera to
@@ -29,7 +29,7 @@ function toDer(pem: string): Buffer {
 }
 
 /** Loads the certificate from `dir`, creating a new one when this computer's addresses have changed. */
-export function loadOrCreateDevCert(dir: string): DevCert {
+export async function loadOrCreateDevCert(dir: string): Promise<DevCert> {
   const hosts = ['localhost', '127.0.0.1', ...localAddresses()].sort();
   const certFile = join(dir, 'dev-cert.pem');
   const keyFile = join(dir, 'dev-key.pem');
@@ -41,8 +41,8 @@ export function loadOrCreateDevCert(dir: string): DevCert {
       return { cert, key: readFileSync(keyFile, 'utf8'), der: toDer(cert), hosts: saved };
     }
   }
-  const pems = selfsigned.generate([{ name: 'commonName', value: 'Valet Parking test server' }], {
-    days: 365,
+  const pems = await generate([{ name: 'commonName', value: 'Valet Parking test server' }], {
+    notAfterDate: new Date(Date.now() + 365 * 24 * 60 * 60_000),
     keySize: 2048,
     algorithm: 'sha256',
     extensions: [

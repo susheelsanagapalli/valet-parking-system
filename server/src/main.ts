@@ -114,7 +114,7 @@ if (savedSms) notifier.setSender(senderFor(savedSms));
 let devCert: DevCert | undefined;
 if (config.httpsPort) {
   try {
-    devCert = loadOrCreateDevCert(config.certDir);
+    devCert = await loadOrCreateDevCert(config.certDir);
   } catch (e) {
     console.error('Could not create the test HTTPS certificate; https is off:', e);
   }

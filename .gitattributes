@@ -1,0 +1,8 @@
+# Keep LF line endings in the repository and in working copies on every OS, so git doesn't warn
+# "LF will be replaced by CRLF" on Windows and files match what CI and Render build.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.xlsx binary
+*.zip binary

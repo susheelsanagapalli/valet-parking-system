@@ -1116,6 +1116,44 @@ input.pin-input {
   display: inline-block;
 }
 
+/* ---------------------------------------------------------------- chips (vehicle list) */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 2px 2px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-weight: 500;
+}
+.chip button {
+  min-height: 32px;
+  min-width: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+.chip button:hover {
+  color: var(--danger);
+}
+.make-toggle {
+  flex: 1;
+  justify-content: flex-start;
+  background: transparent;
+  border-color: transparent;
+  font-weight: 400;
+  padding-left: 4px;
+}
+
 /* ---------------------------------------------------------------- motion */
 
 .fade-in {

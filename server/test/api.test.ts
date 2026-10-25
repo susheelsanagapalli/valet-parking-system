@@ -104,7 +104,10 @@ describe('test credentials (demo mode only)', () => {
   });
 
   it('is not available outside demo mode', async () => {
-    expect((await request(app).get('/api/demo/credentials')).status).toBe(401);
+    // Answers "off" (not an error, so the sign-in page console stays clean) and reveals nothing.
+    const res = await request(app).get('/api/demo/credentials');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ enabled: false });
   });
 
   it('lets a web app on GitHub Pages call the API only from allowed origins', async () => {
