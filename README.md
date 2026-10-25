@@ -59,7 +59,7 @@ The repository has two branches. The app code is the same in both; the branch de
 
 | Branch | What it is | Deploys to |
 | --- | --- | --- |
-| `demo` (default) | All work lands here through pull requests. Demo mode with test logins ([docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md)) | https://valetpay-demo.netlify.app and GitHub Pages |
+| `demo` (default) | All work lands here through pull requests. Demo mode with test logins ([docs/TEST-CREDENTIALS.md](docs/TEST-CREDENTIALS.md)) | https://valetpay-demo.netlify.app |
 | `production` | The live site: production mode, no test credentials | https://valetpay.onrender.com (Render) |
 
 Work on a short-lived branch, open a pull request into `demo`, and delete the branch once it is merged. Check the change on the demo site, then go live by fast-forwarding `production` to `demo`:
@@ -71,16 +71,11 @@ git checkout demo
 
 Never commit straight to `production`; fix things through `demo` and release again, so the two branches never drift apart.
 
-## Live demo on GitHub Pages
+## Live demo
 
-The demo is published on every push to the `demo` branch, after the tests pass (see [Branches and releases](#branches-and-releases)):
+**https://valetpay-demo.netlify.app** is the one demo site. `.github/workflows/netlify.yml` publishes it on every push to the `demo` branch, after the tests pass (see [Branches and releases](#branches-and-releases)). It needs the repository secrets `NETLIFY_AUTH_TOKEN` (a Netlify personal access token) and `NETLIFY_SITE_ID`; without them the workflow skips publishing. Keep the site's visitor access public in Netlify (new sites may start with "team login" protection, which only lets your team in).
 
-- **https://valetpay-demo.netlify.app**: the main demo address, published by `.github/workflows/netlify.yml`. It needs the repository secrets `NETLIFY_AUTH_TOKEN` (a Netlify personal access token) and `NETLIFY_SITE_ID`; without them the workflow skips publishing. New Netlify sites may have "team login" visitor protection on, so switch visitor access to public in the site settings, or only your team can open it.
-- **https://susheelsanagapalli.github.io/valet-parking-system/**: the same demo on GitHub Pages (`.github/workflows/pages.yml`).
-
-GitHub Pages cannot run a server, so the Pages build runs the Valet server's own route code (`server/src/api.ts`) and data layer inside the browser. Everything works there: test logins on the sign-in page, check-in, parking spot with GPS, the queue, guest page, QR payments, handover, settings and tap-to-send SMS. The data is kept in that browser only (so open guest links in another tab of the same browser), and **Reset demo data** starts again. Google Sheets is not available in the Pages demo.
-
-To use the Pages site with a real server and shared data instead, set the repository variable `VALET_API_URL` to the server's https address and `CORS_ORIGINS=https://susheelsanagapalli.github.io` on the server.
+The demo build runs the Valet server's own route code (`server/src/api.ts`) and data layer inside the browser, so it needs no server. Everything works there: test logins on the sign-in page, check-in, parking spot with GPS, the queue, guest page, QR payments, handover, settings, staff and roles, and tap-to-send SMS. The data is kept in that browser only (so open guest links in another tab of the same browser), and **Reset demo data** starts again. Google Sheets is not available in the demo.
 
 ## Deploy to Render with GitHub Actions
 
@@ -166,7 +161,7 @@ A code change applies to every deployment built from that branch, so per-client 
 
 ### Customising the demo site
 
-The GitHub Pages demo is one shared site for showing the product; never put real client data on it.
+The demo site is one shared site for showing the product; never put real client data on it.
 
 - **For one sales meeting:** open the demo, sign in as `admin`, and create a location with the client's name, app name and ticket prefix under **Settings → New location**, then pick their service profile and tariff. This stays in that browser only, so do it on the device you present from. **Reset demo data** removes it.
 - **For everyone who opens the demo:** edit the demo locations and parked cars in `server/src/seedData.ts` (names, app name, ticket prefix, service profile, sample cars), then release it to the `demo` branch. Visitors who opened the demo before keep their saved data until they press **Reset demo data**.
@@ -175,11 +170,11 @@ The GitHub Pages demo is one shared site for showing the product; never put real
 
 ### Demo and production
 
-| | Demo (GitHub Pages, or a server with `SEED_DEMO=true`) | Production (`NODE_ENV=production`) |
+| | Demo (https://valetpay-demo.netlify.app, or a server with `SEED_DEMO=true`) | Production (`NODE_ENV=production`) |
 | --- | --- | --- |
 | Sign-in page | Shows a **Test credentials** panel with every demo login (password `valet123`) | No credentials shown; demo logins don't exist |
 | Accounts | Demo users, plus any you add on the **Staff** page | The first admin from `STAFF_USERS_FILE`, then everyone added on the **Staff** page |
-| Where changes are saved | Pages demo: that browser only. Server in demo mode: memory, unless `DATA_DIR` is set | `staff.json` in `DATA_DIR` (keep it on a persistent disk) |
+| Where changes are saved | Demo site: that browser only. Server in demo mode: memory, unless `DATA_DIR` is set | `staff.json` in `DATA_DIR` (keep it on a persistent disk) |
 
 ### Who can manage staff
 

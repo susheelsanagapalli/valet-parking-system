@@ -3,12 +3,12 @@ const TOKEN_KEY = 'valet.token';
 /**
  * Address of the Valet server. Empty when the web app is served by the server itself; set
  * VITE_API_BASE (e.g. https://valetpay.onrender.com) when the web app is hosted elsewhere,
- * such as GitHub Pages.
+ * such as the demo site.
  */
 export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');
 
 /**
- * GitHub Pages build without a server address: the Valet server runs inside the browser
+ * Demo build without a server address: the Valet server runs inside the browser
  * (demo/demoServer.ts), with data kept on this device only.
  */
 export const IS_BROWSER_DEMO = import.meta.env.VITE_PREVIEW === 'true' && API_BASE === '';
@@ -57,7 +57,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
   let data: { error?: string; code?: string };
 
   if (IS_BROWSER_DEMO) {
-    // Same routes as the real server, running in this browser (loaded only in the Pages demo build).
+    // Same routes as the real server, running in this browser (loaded only in the demo build).
     const { demoRequest } = await import('./demo/demoServer');
     const res = await demoRequest(method, path, options.body, token);
     status = res.status;

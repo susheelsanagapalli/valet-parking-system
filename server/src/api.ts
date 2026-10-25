@@ -1,6 +1,6 @@
 /**
  * The Valet API as plain route definitions, independent of Express and Node.js. The server mounts
- * them on Express (app.ts); the GitHub Pages demo runs the same routes inside the browser.
+ * them on Express (app.ts); the demo site runs the same routes inside the browser.
  */
 import { z } from 'zod';
 import {

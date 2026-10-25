@@ -14,12 +14,12 @@ import { SettingsPage } from './pages/Settings';
 import { StaffPage } from './pages/Staff';
 import { StaffHome, StaffLayout } from './pages/StaffLayout';
 
-/** Shown on the GitHub Pages demo, where the server runs inside the browser. */
+/** Shown on the demo site, where the server runs inside the browser. */
 function PreviewBanner() {
   if (!IS_BROWSER_DEMO) return null;
   return (
     <div className="notice warn" role="status" style={{ borderRadius: 0, textAlign: 'center' }}>
-      <strong>Demo on GitHub Pages.</strong> Everything runs in this browser and the data stays on this device, so open guest links on the same device. Sign in with the test
+      <strong>Demo.</strong> Everything runs in this browser and the data stays on this device, so open guest links on the same device. Sign in with the test
       logins below.
     </div>
   );

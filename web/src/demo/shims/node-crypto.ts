@@ -1,6 +1,6 @@
 /**
- * Browser stand-in for the parts of node:crypto used by the shared Valet code (only in the GitHub
- * Pages demo). HMAC-SHA256 must be synchronous there, so SHA-256 is implemented here; randomness
+ * Browser stand-in for the parts of node:crypto used by the shared Valet code (only in the
+ * browser demo). HMAC-SHA256 must be synchronous there, so SHA-256 is implemented here; randomness
  * comes from the browser's crypto.getRandomValues.
  */
 

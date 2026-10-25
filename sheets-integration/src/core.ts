@@ -1,6 +1,6 @@
 /**
  * Everything except the Excel and Google modules, for environments without Node.js such as the
- * browser demo on GitHub Pages. Node built-ins used here (node:crypto, node:fs) are replaced there
+ * browser demo. Node built-ins used here (node:crypto, node:fs) are replaced there
  * by small browser versions.
  */
 export * from './schema.js';

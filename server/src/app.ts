@@ -21,7 +21,7 @@ export interface AppDeps {
   now?: () => Date;
   /** Git commit being run, shown by /api/health. */
   commit?: string;
-  /** Web app addresses on other origins (e.g. GitHub Pages) allowed to call this API. */
+  /** Web app addresses on other origins (e.g. a web app hosted on another domain) allowed to call this API. */
   corsOrigins?: string[];
   /**
    * Demo mode only: the shared demo password and the handover PIN of each ticket checked in since
