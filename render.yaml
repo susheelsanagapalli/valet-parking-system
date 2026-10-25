@@ -20,15 +20,17 @@ services:
         generateValue: true
       - key: PIN_HMAC_SECRET
         generateValue: true
-      # Test environment until go-live: demo users, two parked cars and the Test credentials panel.
-      # Render sets NODE_ENV=production for Node services by default, and the server refuses to
-      # start in production with SEED_DEMO=true, so the test environment says so explicitly.
-      # At go-live follow the README "Go-live checklist": NODE_ENV=production, SEED_DEMO=false,
-      # a disk with DATA_DIR=/var/data, and STAFF_USERS_FILE (a Secret File) with the first admin.
+      # Production: no demo users, demo data or Test credentials panel (the demo with test logins is
+      # https://valetpay-demo.netlify.app). The first admin comes from the Secret File
+      # staff-users.json (made with "npm run staff-user"); add it under Environment → Secret Files.
+      # Still to do for real guests (README "Go-live checklist"): a paid plan with a disk and
+      # DATA_DIR=/var/data, and Google Sheets, because on the free plan data is kept in memory only.
       - key: NODE_ENV
-        value: development
+        value: production
       - key: SEED_DEMO
-        value: "true"
+        value: "false"
+      - key: STAFF_USERS_FILE
+        value: /etc/secrets/staff-users.json
       - key: SMS_PROVIDER
         value: manual
       # On a paid plan, add a disk mounted at /var/data and uncomment this so the Google
