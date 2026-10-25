@@ -75,7 +75,18 @@ if (config.production && storeName === 'memory') {
 }
 const repo = repoHolder.proxy();
 
-const users = config.staffUsersFile ? UserDirectory.fromFile(config.staffUsersFile, config.authSecret) : new UserDirectory(config.authSecret);
+let users: UserDirectory;
+if (config.staffStorePath) {
+  const opened = UserDirectory.open(config.authSecret, config.staffStorePath, config.staffUsersFile);
+  users = opened.users;
+  if (opened.source === 'saved' && config.staffUsersFile) {
+    console.log(`Staff accounts loaded from ${config.staffStorePath} (managed in the app); STAFF_USERS_FILE is only used when that file doesn't exist.`);
+  } else if (opened.source === 'bootstrap') {
+    console.log(`Staff accounts copied from ${config.staffUsersFile} to ${config.staffStorePath}; manage them in the app from now on.`);
+  }
+} else {
+  users = config.staffUsersFile ? UserDirectory.fromFile(config.staffUsersFile, config.authSecret) : new UserDirectory(config.authSecret);
+}
 let demoPins = new Map<string, string>();
 if (config.seedDemo) {
   seedLocations(repo);

@@ -3,16 +3,17 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { ValetSheetsRepository } from '@valet/sheets-integration';
 import { ApiResponse, HttpError, apiRoutes, errorResponse, type ApiContext } from './api.js';
-import { authenticate, requirePermission, type UserAuth } from './auth.js';
+import { authenticate, requirePermission } from './auth.js';
 import { checkFileSignature, decodeImage, signFileUrl, type PhotoStore } from './photos.js';
 import type { Notifier } from './sms.js';
 import type { SmsSettingsMemory } from './smsOptions.js';
+import type { StaffDirectory } from './staffDirectory.js';
 
 export { HttpError } from './api.js';
 
 export interface AppDeps {
   repo: ValetSheetsRepository;
-  users: UserAuth;
+  users: StaffDirectory;
   photos: PhotoStore;
   authSecret: string;
   publicBaseUrl: string;

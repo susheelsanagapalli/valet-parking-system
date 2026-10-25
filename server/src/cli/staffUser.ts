@@ -46,7 +46,11 @@ async function main(): Promise<void> {
     },
   });
   const file = values.file!;
-  const users: StaffUser[] = existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as StaffUser[]) : [];
+  // A plain list (STAFF_USERS_FILE) or the {users, roles} the server saves (staff.json); written back in the same shape.
+  const raw: unknown = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : [];
+  const saved = Array.isArray(raw) ? null : (raw as { users?: StaffUser[]; roles?: unknown[] });
+  const users: StaffUser[] = saved ? (saved.users ?? []) : (raw as StaffUser[]);
+  const write = (list: StaffUser[]) => writeFileSync(file, `${JSON.stringify(saved ? { ...saved, users: list } : list, null, 2)}\n`);
 
   if (values.list) {
     if (users.length === 0) console.log(`${file} has no users.`);
@@ -55,7 +59,7 @@ async function main(): Promise<void> {
   }
 
   if (values.remove) {
-    writeFileSync(file, `${JSON.stringify(removeStaffUser(users, values.remove), null, 2)}\n`);
+    write(removeStaffUser(users, values.remove));
     console.log(`Removed ${values.remove} from ${file}. Restart the server (or redeploy) to apply.`);
     return;
   }
@@ -74,7 +78,7 @@ async function main(): Promise<void> {
   }
 
   const { users: next, created } = upsertStaffUser(users, { username: values.username, name: values.name, role: values.role, locations: values.locations!, password });
-  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+  write(next);
   console.log(`${created ? 'Added' : 'Updated'} ${values.username} (${values.role}) in ${file}. Restart the server (or redeploy) to apply.`);
 }
 

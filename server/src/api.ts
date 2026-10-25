@@ -13,7 +13,18 @@ import {
   type TicketStatus,
   type ValetSheetsRepository,
 } from '@valet/sheets-integration';
-import { can, canAccessLocation, toPublicUser, type Permission, type StaffUser, type UserAuth } from './permissions.js';
+import {
+  PERMISSIONS,
+  PERMISSION_LABELS,
+  allowedBeforePasswordChange,
+  can,
+  canAccessLocation,
+  permissionsOf,
+  toPublicUser,
+  type Permission,
+  type StaffUser,
+} from './permissions.js';
+import { StaffError, type StaffDirectory } from './staffDirectory.js';
 import { SMS_TEXT, normalizeMobile, type Notifier, type SmsDraft, type SmsKind } from './sms.js';
 import {
   ANDROID_GATEWAY_DOCS,
@@ -62,7 +73,7 @@ export interface ApiRoute {
 
 export interface ApiDeps {
   repo: ValetSheetsRepository;
-  users: UserAuth;
+  users: StaffDirectory;
   publicBaseUrl: string;
   now?: () => Date;
   commit?: string;
@@ -92,7 +103,7 @@ const HTTP_STATUS: Record<string, number> = {
 
 /** Status and body for an error thrown by a handler. */
 export function errorResponse(err: unknown): { status: number; body: { error: string; code?: string } } {
-  if (err instanceof HttpError) return { status: err.status, body: { error: err.message } };
+  if (err instanceof HttpError || err instanceof StaffError) return { status: err.status, body: { error: err.message } };
   if (err instanceof ValetError) return { status: HTTP_STATUS[err.code] ?? 400, body: { error: err.message, code: err.code } };
   return { status: 500, body: { error: 'Something went wrong' } };
 }
@@ -173,6 +184,7 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
   };
   const view = (ctx: ApiContext, ticket: TicketRow) => staffTicket(repo, repo.getTicketDetails(ticket.id).ticket, user(ctx), deps.photoUrl, now());
   const guestLink = (t: TicketRow) => `${deps.publicBaseUrl}/t/${t.qr_token}`;
+  const publicUser = (u: StaffUser) => ({ ...toPublicUser({ ...u, permissions: users.permissionsFor(u.role) }), roleName: users.roleName(u.role) });
 
   /**
    * Sends (or, for tap-to-send, prepares) a guest SMS for a ticket. Returns a draft for the staff
@@ -200,11 +212,15 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
     const body = parse(z.object({ username: z.string().min(1), password: z.string().min(1) }), ctx.body);
     const result = users.login(body.username, body.password);
     if ('error' in result) {
-      return new ApiResponse(result.error === 'locked' ? 423 : 401, {
-        error: result.error === 'locked' ? 'Too many failed attempts. Try again in 15 minutes.' : 'Wrong username or password',
-      });
+      const refused = {
+        locked: [423, 'Too many failed attempts. Try again in 15 minutes.'],
+        disabled: [403, 'This account is switched off. Ask your admin.'],
+        invalid: [401, 'Wrong username or password'],
+      } as const;
+      const [status, error] = refused[result.error];
+      return new ApiResponse(status, { error });
     }
-    return { token: result.token, user: toPublicUser(result.user) };
+    return { token: result.token, user: publicUser(result.user) };
   });
 
   if (deps.demo) {
@@ -219,7 +235,10 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
       return {
         notice: demo.notice ?? 'Test environment only. These credentials are removed at go-live (NODE_ENV=production).',
         password: demo.password,
-        users: users.list().map((u) => ({ username: u.username, name: u.name, role: u.role })),
+        users: users
+          .list()
+          .filter((u) => !u.disabled)
+          .map((u) => ({ username: u.username, name: u.name, role: u.role })),
         guestTickets,
         smsProvider: deps.notifier?.sender.name ?? 'off',
         sms: deps.notifier?.recent().slice(0, 15) ?? [],
@@ -286,7 +305,69 @@ export function apiRoutes(deps: ApiDeps): ApiRoute[] {
 
   // ------------------------------------------------------------------ staff
 
-  staff('GET', '/me', undefined, (ctx) => toPublicUser(user(ctx)));
+  staff('GET', '/me', undefined, (ctx) => publicUser(user(ctx)));
+
+  staff('POST', '/auth/change-password', undefined, (ctx) => {
+    const body = parse(z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(1) }), ctx.body);
+    const result = users.changeOwnPassword(user(ctx).id, body.currentPassword, body.newPassword);
+    return { token: result.token, user: publicUser(result.user) };
+  });
+
+  // ------------------------------------------------------------------ staff accounts and roles
+
+  /** Locations must exist, and the API answers with ids the caller may see. */
+  const locationList = z.union([z.literal('all'), z.array(z.string()).max(200)]);
+  const checkLocations = (locations: string[] | 'all') => {
+    if (locations !== 'all') for (const id of locations) repo.getLocation(id);
+    return locations;
+  };
+  const staffRow = (actor: StaffUser, u: StaffUser) => ({ ...publicUser(u), manageable: users.canManage(actor, u), self: u.id === actor.id });
+
+  staff('GET', '/staff/users', 'users.manage', (ctx) => {
+    const actor = user(ctx);
+    return users
+      .list()
+      .map((u) => staffRow(actor, u))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  staff('POST', '/staff/users', 'users.manage', (ctx) => {
+    const body = parse(z.object({ username: z.string(), name: z.string(), role: z.string(), locations: locationList, password: z.string() }), ctx.body);
+    const created = users.createUser(user(ctx), { ...body, locations: checkLocations(body.locations) });
+    return staffRow(user(ctx), created);
+  });
+
+  staff('PUT', '/staff/users/:userId', 'users.manage', (ctx) => {
+    const body = parse(z.object({ name: z.string().optional(), role: z.string().optional(), locations: locationList.optional(), disabled: z.boolean().optional() }), ctx.body);
+    const updated = users.updateUser(user(ctx), String(ctx.params.userId), { ...body, locations: body.locations && checkLocations(body.locations) });
+    return staffRow(user(ctx), updated);
+  });
+
+  staff('POST', '/staff/users/:userId/password', 'users.manage', (ctx) => {
+    const body = parse(z.object({ password: z.string() }), ctx.body);
+    return staffRow(user(ctx), users.resetPassword(user(ctx), String(ctx.params.userId), body.password));
+  });
+
+  staff('DELETE', '/staff/users/:userId', 'users.manage', (ctx) => {
+    users.deleteUser(user(ctx), String(ctx.params.userId));
+    return { ok: true };
+  });
+
+  staff('GET', '/staff/roles', 'users.manage', (ctx) => {
+    const mine = permissionsOf(user(ctx));
+    return {
+      roles: users.roles().map((r) => ({ ...r, manageable: r.permissions.every((p) => mine.includes(p)) })),
+      permissions: PERMISSIONS.map((id) => ({ id, label: PERMISSION_LABELS[id], grantable: mine.includes(id) })),
+    };
+  });
+
+  const roleBody = z.object({ name: z.string(), description: z.string().max(200).optional(), permissions: z.array(z.string()).max(PERMISSIONS.length) });
+  staff('POST', '/staff/roles', 'users.manage', (ctx) => users.createRole(user(ctx), parse(roleBody, ctx.body)));
+  staff('PUT', '/staff/roles/:roleId', 'users.manage', (ctx) => users.updateRole(user(ctx), String(ctx.params.roleId), parse(roleBody.partial(), ctx.body)));
+  staff('DELETE', '/staff/roles/:roleId', 'users.manage', (ctx) => {
+    users.deleteRole(user(ctx), String(ctx.params.roleId));
+    return { ok: true };
+  });
   staff('GET', '/locations', undefined, (ctx) => repo.listLocations().filter((l) => canAccessLocation(user(ctx), l.id)));
 
   staff('POST', '/locations', 'locations.manage', (ctx) => {
@@ -593,7 +674,7 @@ export function matchRoute(routes: ApiRoute[], method: string, path: string): { 
  */
 export async function handleRequest(
   routes: ApiRoute[],
-  users: UserAuth,
+  users: StaffDirectory,
   request: { method: string; path: string; query?: Record<string, string>; body?: unknown; token?: string | null },
 ): Promise<{ status: number; body: unknown }> {
   const match = matchRoute(routes, request.method, request.path);
@@ -603,6 +684,9 @@ export async function handleRequest(
   if (route.access === 'staff') {
     user = request.token ? users.verify(request.token) : undefined;
     if (!user) return { status: 401, body: { error: 'Sign in required' } };
+    if (user.mustChangePassword && !allowedBeforePasswordChange(request.method, request.path)) {
+      return { status: 403, body: { error: 'Choose a new password before continuing', code: 'PASSWORD_CHANGE_REQUIRED' } };
+    }
     if (route.permission && !can(user, route.permission)) return { status: 403, body: { error: `Missing permission: ${route.permission}` } };
   }
   try {

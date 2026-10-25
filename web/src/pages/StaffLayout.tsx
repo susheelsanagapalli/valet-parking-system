@@ -1,7 +1,8 @@
-import { Car, Database, LayoutDashboard, ListOrdered, LogIn, LogOut, QrCode, Settings, Wallet, WifiOff, type LucideIcon } from 'lucide-react';
+import { Car, Database, LayoutDashboard, ListOrdered, LogIn, LogOut, QrCode, Settings, UserRound, Users, Wallet, WifiOff, type LucideIcon } from 'lucide-react';
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
 import { IS_BROWSER_DEMO } from '../api';
 import { useOnline } from '../online';
+import { FirstPasswordPage } from './Account';
 import { NewLocationCard } from './Settings';
 import { useSession } from '../session';
 
@@ -14,6 +15,7 @@ const TABS: Array<{ to: string; label: string; permission: string; icon: LucideI
   { to: 'settings', label: 'Settings', permission: 'locations.settings', icon: Settings },
   { to: 'data', label: 'Data', permission: 'data.manage', icon: Database },
   { to: 'qr-approvals', label: 'QR approvals', permission: 'payment_qr.approve', icon: QrCode },
+  { to: 'staff', label: 'Staff', permission: 'users.manage', icon: Users },
 ];
 
 export function StaffLayout() {
@@ -21,6 +23,8 @@ export function StaffLayout() {
   const online = useOnline();
   if (loading) return <main className="muted">Loading…</main>;
   if (!user) return <Navigate to="/login" replace />;
+  // The server refuses everything else until then, so ask straight away.
+  if (user.mustChangePassword) return <FirstPasswordPage />;
 
   return (
     <>
@@ -40,7 +44,12 @@ export function StaffLayout() {
             ))}
           </select>
         )}
-        <span className="hide-sm">{user.name}</span>
+        <NavLink to="account" className="button account-link" aria-label={`Your account: ${user.name}`}>
+          <UserRound size={18} aria-hidden />
+          <span className="hide-sm" aria-hidden>
+            {user.name}
+          </span>
+        </NavLink>
         <button type="button" onClick={logout} aria-label="Sign out">
           <LogOut size={18} aria-hidden />
           <span className="hide-sm" aria-hidden>

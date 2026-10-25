@@ -125,6 +125,18 @@ h3 {
 .topbar select option {
   color: #15202e;
 }
+.topbar .account-link {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.12);
+  color: inherit;
+  padding: 0 10px;
+  font-weight: 600;
+}
+.topbar .account-link.active {
+  background: rgba(255, 255, 255, 0.28);
+}
 
 .tabs {
   display: flex;

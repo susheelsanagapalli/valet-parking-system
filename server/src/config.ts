@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 export interface Config {
@@ -12,7 +13,10 @@ export interface Config {
   demoMode: boolean;
   authSecret: string;
   pinSecret: string;
+  /** Read-only list of the first staff accounts (e.g. a Render secret file). */
   staffUsersFile?: string;
+  /** Where accounts and custom roles are saved after changes in the app; wins over staffUsersFile once it exists. */
+  staffStorePath?: string;
   photoStorage: 'local' | 'google_drive';
   uploadsDir: string;
   drivePhotoFolderId?: string;
@@ -75,9 +79,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   // Hosts such as Render provide https and the public address themselves.
   const hostedUrl = env.RENDER_EXTERNAL_URL?.replace(/\/$/, '');
-  if (production && !env.STAFF_USERS_FILE) {
-    throw new Error('STAFF_USERS_FILE must be set in production: without it nobody can sign in (create it with "npm run staff-user")');
-  }
   if (production && !env.PUBLIC_BASE_URL && !hostedUrl) {
     throw new Error('PUBLIC_BASE_URL must be set in production: guest ticket links in SMS are built from it');
   }
@@ -85,6 +86,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   // Folder for files the server writes (Google connection, SMS settings, write queue, uploads, certificates).
   const dataDir = env.DATA_DIR ?? '.';
   const inData = (name: string) => join(dataDir, name);
+  // Staff accounts and roles managed in the app are saved here. Demo mode without DATA_DIR keeps them
+  // in memory, so a local test run doesn't leave a staff.json in the repository.
+  const staffStorePath = env.STAFF_STORE_PATH ?? (production || env.DATA_DIR ? inData('staff.json') : undefined);
+  if (production && !env.STAFF_USERS_FILE && !(staffStorePath && existsSync(staffStorePath))) {
+    throw new Error('STAFF_USERS_FILE must be set in production for the first start: without it nobody can sign in (create it with "npm run staff-user")');
+  }
   return {
     port: Number(env.PORT ?? 8080),
     httpsPort,
@@ -96,6 +103,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     authSecret: secret('AUTH_SECRET'),
     pinSecret: secret('PIN_HMAC_SECRET'),
     staffUsersFile: env.STAFF_USERS_FILE || undefined,
+    staffStorePath,
     photoStorage: env.PHOTO_STORAGE === 'google_drive' ? 'google_drive' : 'local',
     uploadsDir: env.UPLOADS_DIR ?? inData('uploads'),
     drivePhotoFolderId: env.DRIVE_PHOTO_FOLDER_ID || undefined,

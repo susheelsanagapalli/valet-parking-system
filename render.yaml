@@ -20,7 +20,8 @@ services:
       - key: PIN_HMAC_SECRET
         generateValue: true
       # Test environment until go-live: demo users, two parked cars and the Test credentials panel.
-      # At go-live set NODE_ENV=production and SEED_DEMO=false, and provide STAFF_USERS_FILE.
+      # At go-live follow the README "Go-live checklist": NODE_ENV=production, SEED_DEMO=false,
+      # a disk with DATA_DIR=/var/data, and STAFF_USERS_FILE (a Secret File) with the first admin.
       - key: SEED_DEMO
         value: "true"
       - key: SMS_PROVIDER

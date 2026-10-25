@@ -6,7 +6,7 @@
  */
 import { MemorySheetStore, ValetSheetsRepository, type Row } from '@valet/sheets-integration';
 import { apiRoutes, handleRequest } from '../../../server/src/api';
-import type { StaffUser, UserAuth } from '../../../server/src/permissions';
+import { StaffDirectory, type PasswordHasher, type StaffData, type TokenCodec } from '../../../server/src/staffDirectory';
 import { DEMO_PASSWORD, DEMO_USERS, seedLocations, seedTickets } from '../../../server/src/seedData';
 import { ManualSmsSender, Notifier } from '../../../server/src/sms';
 import { SmsSettingsMemory, type SmsSettings } from '../../../server/src/smsOptions';
@@ -28,6 +28,8 @@ interface Snapshot {
   rows: Record<string, Row[]>;
   pins: Array<[string, string]>;
   sms?: SmsSettings | null;
+  /** Staff accounts and custom roles created in this browser. */
+  staff?: StaffData;
 }
 
 function load<T>(key: string): T | null {
@@ -47,24 +49,47 @@ function save(key: string, value: unknown): void {
   }
 }
 
-/** Demo sign-in: every demo user's password is DEMO_PASSWORD; tokens live only in this browser. */
-class DemoUsers implements UserAuth {
-  private readonly users: StaffUser[] = DEMO_USERS.map((u) => ({ ...u, passwordHash: '' }));
-
-  login(username: string, password: string) {
-    const user = this.users.find((u) => u.username === username.trim().toLowerCase());
-    if (!user || password !== DEMO_PASSWORD) return { error: 'invalid' as const };
-    return { token: `demo.${user.id}.${globalThis.crypto.randomUUID()}`, user };
+/**
+ * Demo password hashing. Not secure (this browser holds all demo data anyway, and only demo users
+ * live here); it just avoids keeping typed passwords as plain text. The server uses scrypt, and
+ * never accepts these hashes.
+ */
+function demoHash(password: string, salt: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (const ch of `${salt}:${password}`) {
+    const c = ch.charCodeAt(0);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
   }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
 
-  verify(token: string) {
-    const id = token.startsWith('demo.') ? token.split('.')[1] : undefined;
-    return this.users.find((u) => u.id === id);
-  }
+const demoHasher: PasswordHasher = {
+  hash(password) {
+    const salt = globalThis.crypto.randomUUID().slice(0, 8);
+    return `demo$${salt}$${demoHash(password, salt)}`;
+  },
+  check(password, stored) {
+    const [scheme, salt, hash] = stored.split('$');
+    return scheme === 'demo' && Boolean(salt) && demoHash(password, salt!) === hash;
+  },
+};
 
-  list() {
-    return this.users;
-  }
+/** Tokens live only in this browser: "demo.<user id>.<version>.<random>". */
+const demoTokens: TokenCodec = {
+  sign: (p) => `demo.${p.sub}.${p.v}.${globalThis.crypto.randomUUID()}`,
+  read(token) {
+    const [kind, sub, v] = token.split('.');
+    return kind === 'demo' && sub ? { sub, v: Number(v) || 0, exp: Number.MAX_SAFE_INTEGER } : undefined;
+  },
+};
+
+function demoStaff(saved: StaffData | undefined): StaffDirectory {
+  const data: StaffData = saved ?? { users: DEMO_USERS.map((u) => ({ ...u, passwordHash: demoHasher.hash(DEMO_PASSWORD) })), roles: [] };
+  return new StaffDirectory({ hasher: demoHasher, tokens: demoTokens }, data);
 }
 
 export function resetDemoData(): void {
@@ -81,8 +106,8 @@ async function start() {
   const loadedVersion = storedVersion();
   const repo = new ValetSheetsRepository({ store: new MemorySheetStore(), pinSecret: 'browser-demo', flushIntervalMs: 0 });
   await repo.load();
-  const users = new DemoUsers();
   const snapshot = load<Snapshot>(STORAGE_KEY);
+  const users = demoStaff(snapshot?.staff);
   const photos = new Map<string, string>(load<Array<[string, string]>>(PHOTO_KEY) ?? []);
   let pins = new Map<string, string>();
 
@@ -128,7 +153,7 @@ async function start() {
 
   const state = { routes, users, version: loadedVersion, persist: () => undefined as void };
   state.persist = () => {
-    save(STORAGE_KEY, { rows: repo.exportRows(), pins: [...pins], sms: smsSettings.get() } satisfies Snapshot);
+    save(STORAGE_KEY, { rows: repo.exportRows(), pins: [...pins], sms: smsSettings.get(), staff: users.data() } satisfies Snapshot);
     const version = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     save(VERSION_KEY, version);
     state.version = storedVersion();
