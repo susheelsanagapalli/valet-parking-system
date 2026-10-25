@@ -1,8 +1,17 @@
+import { MapPin, Navigation } from 'lucide-react';
 import { apiUrl } from '../api';
 import { STATUS_LABEL, type StaffTicket } from '../types';
 
+/** Statuses where someone is waiting on the car; their dot pulses. */
+const LIVE: ReadonlyArray<StaffTicket['status']> = ['retrieval_requested', 'assigned_in_transit'];
+
 export function StatusBadge({ status }: { status: StaffTicket['status'] }) {
-  return <span className={`badge ${status}`}>{STATUS_LABEL[status]}</span>;
+  return (
+    <span className={`badge with-dot ${status}`}>
+      <span className={`dot${LIVE.includes(status) ? ' pulse' : ''}`} aria-hidden />
+      {STATUS_LABEL[status]}
+    </span>
+  );
 }
 
 export function spotDescription(t: StaffTicket): string {
@@ -33,11 +42,13 @@ export function TicketSummary({ ticket, children }: { ticket: StaffTicket; child
           <strong>{ticket.plate_number}</strong> <span className="muted">{[ticket.colour, ticket.make, ticket.model].filter(Boolean).join(' ')}</span>
         </div>
         <div className="muted">
+          <MapPin size={16} aria-hidden style={{ verticalAlign: '-3px', marginRight: 4 }} />
           Key {ticket.key_tag} · {spotDescription(ticket)}
           {map && (
             <>
               {' · '}
-              <a href={map} target="_blank" rel="noreferrer">
+              <a href={map} target="_blank" rel="noreferrer" style={{ whiteSpace: 'nowrap' }}>
+                <Navigation size={14} aria-hidden style={{ verticalAlign: '-2px', marginRight: 3 }} />
                 Map
               </a>
             </>

@@ -50,6 +50,8 @@ export interface GuestTicket {
   ticketNumber: string;
   status: TicketStatus;
   plateNumber: string | null;
+  /** Colour, make and model, e.g. "White Hyundai Creta". */
+  vehicle: string | null;
   checkedInAt: string;
   requestedAt: string | null;
   scheduledFor: string | null;

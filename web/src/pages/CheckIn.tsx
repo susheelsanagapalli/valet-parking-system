@@ -1,4 +1,5 @@
 import QRCode from 'qrcode';
+import { CalendarDays, Car, CheckCircle2, ExternalLink, Hash, KeyRound, MapPin, Palette, Phone, Plus, Printer, Ticket, User } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { PhotoPicker } from '../components/PhotoPicker';
@@ -62,46 +63,64 @@ export function CheckInPage() {
   if (result) {
     return (
       <div className="stack">
-        <div className="card center">
-          <div className="muted">Ticket</div>
-          <div className="big-number mono">{result.ticket.ticket_number}</div>
+        <div className="card center stack fade-in" style={{ alignItems: 'center' }}>
+          <CheckCircle2 size={40} aria-hidden style={{ color: 'var(--ok)' }} />
           <div>
-            Handover PIN: <strong className="mono" style={{ fontSize: '1.4rem' }}>{result.handoverPin}</strong>
+            <div className="section-label">Ticket</div>
+            <div className="big-number mono">{result.ticket.ticket_number}</div>
+            <div className="muted" style={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              {result.ticket.plate_number}
+            </div>
           </div>
-          <p className="muted">The PIN is shown only now. Give it to the guest with the ticket.</p>
-          {qr && <img className="qr" src={qr} alt="Guest ticket QR code" />}
-          <p>
-            <a href={result.guestLink} target="_blank" rel="noreferrer">
-              Guest ticket link
-            </a>
+          <div>
+            <div className="section-label label-text" style={{ marginBottom: 6 }}>
+              <KeyRound size={14} aria-hidden /> Handover PIN
+            </div>
+            <span className="pin-display">{result.handoverPin}</span>
+          </div>
+          <p className="muted" style={{ margin: 0 }}>
+            The PIN is shown only now. Give it to the guest with the ticket.
           </p>
+          {qr && <img className="qr" src={qr} alt="Guest ticket QR code" />}
+          <a href={result.guestLink} target="_blank" rel="noreferrer" className="label-text">
+            <ExternalLink size={16} aria-hidden /> Guest ticket link
+          </a>
           {result.sms === 'sending' && <div className="notice ok">Ticket link and PIN sent to the guest by SMS.</div>}
           {result.smsDraft && <SendSmsButton draft={result.smsDraft} label="Send ticket SMS" />}
           {result.sms === 'not_configured' && <div className="notice warn">SMS is switched off. Let the guest scan the QR or print the ticket.</div>}
           {result.sms === 'invalid_mobile' && <div className="notice warn">The mobile number looks wrong, so no SMS was sent. Let the guest scan the QR.</div>}
           {result.sms === 'no_mobile' && <div className="notice warn">No mobile number: print the ticket for the guest.</div>}
-          <div className="row" style={{ justifyContent: 'center' }}>
+          <div className="row no-print" style={{ justifyContent: 'center' }}>
             <button type="button" onClick={() => window.print()}>
+              <Printer size={20} aria-hidden />
               Print ticket
             </button>
           </div>
         </div>
-        <div className="card">
+        <div className="card no-print">
           {parked ? (
             <div className="stack">
-              <div className="notice ok">Parked: {spotDescription(parked.ticket)}</div>
+              <div className="notice ok label-text">
+                <CheckCircle2 size={18} aria-hidden /> Parked: {spotDescription(parked.ticket)}
+              </div>
               {parked.warnings.map((w) => (
                 <div key={w} className="notice warn">
                   {w}
                 </div>
               ))}
               <button className="primary big" type="button" onClick={reset}>
+                <Plus size={22} aria-hidden />
                 Next car
               </button>
             </div>
           ) : (
             <>
-              <h2>Where is it parked?</h2>
+              <div className="page-title">
+                <span className="icon-tile tone-ok" aria-hidden>
+                  <MapPin size={22} />
+                </span>
+                <h2>Where is it parked?</h2>
+              </div>
               <SpotForm ticket={result.ticket} settings={settings} onDone={(ticket, warnings) => setParked({ ticket, warnings })} />
             </>
           )}
@@ -113,27 +132,66 @@ export function CheckInPage() {
   const photosRequired = settings.vehiclePhotos === 'required';
   return (
     <form className="card stack" onSubmit={(e) => void submit(e)}>
-      <h1>Check in a car</h1>
+      <div className="page-title" style={{ marginBottom: 0 }}>
+        <span className="icon-tile tone-info" aria-hidden>
+          <Car size={22} />
+        </span>
+        <div>
+          <h1>Check in a car</h1>
+          <p className="muted">Drop-off at {location?.name}</p>
+        </div>
+      </div>
       <div className="grid">
         <label>
-          Plate number *
-          <input value={form.plateNumber} onChange={set('plateNumber')} autoCapitalize="characters" placeholder="KA01AB1234" required />
+          <span className="label-text">
+            <Hash size={16} aria-hidden /> Plate number <span className="req">*</span>
+          </span>
+          <input
+            value={form.plateNumber}
+            onChange={(e) => setForm({ ...form, plateNumber: e.target.value.toUpperCase() })}
+            autoCapitalize="characters"
+            placeholder="KA01AB1234"
+            className="mono"
+            style={{ letterSpacing: '0.06em' }}
+            required
+            autoFocus
+          />
         </label>
         <label>
-          Key tag *
+          <span className="label-text">
+            <KeyRound size={16} aria-hidden /> Key tag <span className="req">*</span>
+          </span>
           <input value={form.keyTag} onChange={set('keyTag')} placeholder="K-17" required />
         </label>
+        {settings.inAndOut && (
+          <label>
+            <span className="label-text">
+              <CalendarDays size={16} aria-hidden /> Stay end date {settings.stayEndDateRequired && <span className="req">*</span>}
+            </span>
+            <input type="date" value={form.stayEndDate} onChange={set('stayEndDate')} required={settings.stayEndDateRequired} />
+          </label>
+        )}
+      </div>
+
+      <p className="section-label">Optional details</p>
+      <div className="grid">
         <label>
-          Guest mobile
+          <span className="label-text">
+            <Phone size={16} aria-hidden /> Guest mobile
+          </span>
           <span className="hint">For the ticket link. Leave empty for a printed ticket.</span>
           <input value={form.guestMobile} onChange={set('guestMobile')} inputMode="tel" placeholder="+91 98765 43210" />
         </label>
         <label>
-          Guest name
+          <span className="label-text">
+            <User size={16} aria-hidden /> Guest name
+          </span>
           <input value={form.guestName} onChange={set('guestName')} />
         </label>
         <label>
-          Make
+          <span className="label-text">
+            <Car size={16} aria-hidden /> Make
+          </span>
           <input value={form.make} onChange={set('make')} list="makes" />
           <datalist id="makes">
             {MAKES.map((m) => (
@@ -143,10 +201,12 @@ export function CheckInPage() {
         </label>
         <label>
           Model
-          <input value={form.model} onChange={set('model')} />
+          <input value={form.model} onChange={set('model')} placeholder="e.g. Swift, Creta" />
         </label>
         <label>
-          Colour
+          <span className="label-text">
+            <Palette size={16} aria-hidden /> Colour
+          </span>
           <select value={form.colour} onChange={set('colour')}>
             <option value="">—</option>
             {COLOURS.map((c) => (
@@ -154,12 +214,6 @@ export function CheckInPage() {
             ))}
           </select>
         </label>
-        {settings.inAndOut && (
-          <label>
-            Stay end date{settings.stayEndDateRequired ? ' *' : ''}
-            <input type="date" value={form.stayEndDate} onChange={set('stayEndDate')} required={settings.stayEndDateRequired} />
-          </label>
-        )}
       </div>
       {settings.vehiclePhotos !== 'off' && (
         <PhotoPicker
@@ -172,6 +226,7 @@ export function CheckInPage() {
       )}
       {error && <div className="notice error">{error}</div>}
       <button className="primary big" type="submit" disabled={busy || (photosRequired && photos.length < settings.vehiclePhotoCount)}>
+        <Ticket size={22} aria-hidden />
         {busy ? 'Creating ticket…' : 'Create ticket'}
       </button>
     </form>

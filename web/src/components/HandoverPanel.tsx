@@ -1,3 +1,4 @@
+import { AlertTriangle, Banknote, Check, CheckCircle2, CreditCard, Handshake, KeyRound, PenLine, ScanLine, ShieldCheck } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { api } from '../api';
 import { useAction } from '../hooks';
@@ -77,49 +78,70 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
     if (res) onChanged(res);
   }
 
+  const paid = due <= 0;
+  const confirmed = Boolean(ticket.confirmation);
+
   return (
     <div className="stack">
-      <h3>1. Verify guest</h3>
+      <StepHead n={1} done={verified} title="Verify guest" />
       {verified ? (
-        <div className="notice ok">Guest verified</div>
+        <div className="notice ok label-text">
+          <ShieldCheck size={18} aria-hidden /> Guest verified
+        </div>
       ) : scanning ? (
         <QrScanner onResult={onScan} onClose={() => setScanning(false)} />
       ) : (
         <div className="stack">
           {canScanQr() && (
             <button type="button" className="primary" onClick={() => setScanning(true)}>
+              <ScanLine size={20} aria-hidden />
               Scan guest's QR
             </button>
           )}
-          <p className="muted" style={{ margin: 0 }}>
-            Or ask for the 4-digit PIN (OTP) from the guest's ticket SMS:
-          </p>
-          <div className="row">
-            <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" placeholder="4-digit PIN (OTP)" style={{ flex: 1 }} aria-label="Handover PIN" />
+          <div className="divider-text">or ask for the 4-digit PIN (OTP) from the ticket SMS</div>
+          <div className="row" style={{ justifyContent: 'center' }}>
+            <input
+              className="pin-input"
+              value={pin}
+              onChange={(e) => {
+                setPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                setError(null);
+              }}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="••••"
+              aria-label="Handover PIN"
+            />
             <button type="button" disabled={pin.length !== 4 || busy} onClick={() => void verify({ pin })}>
+              <KeyRound size={18} aria-hidden />
               Check PIN
             </button>
           </div>
         </div>
       )}
 
-      <h3>2. Payment</h3>
-      {due <= 0 ? (
-        <div className="notice ok">Nothing due{ticket.fee_amount > 0 ? ` (paid ₹${ticket.fee_amount})` : ''}</div>
+      <StepHead n={2} done={paid} title="Payment" />
+      {paid ? (
+        <div className="notice ok label-text">
+          <CheckCircle2 size={18} aria-hidden /> Nothing due{ticket.fee_amount > 0 ? ` (paid ₹${ticket.fee_amount})` : ''}
+        </div>
       ) : (
         <div className="stack">
-          <div className="notice warn">
-            Balance due: <strong>₹{due}</strong>
-            {pendingQr && ' — a QR payment is waiting for verification by a supervisor.'}
+          <div className="card fee-card dark" style={{ marginBottom: 0 }}>
+            <div className="meta">Balance due</div>
+            <div className="amount">₹{due}</div>
+            {pendingQr && <div className="meta">A QR payment is waiting for verification by a supervisor.</div>}
           </div>
           <div className="row">
             {settings.paymentMethods.includes('cash') && (
               <button type="button" disabled={busy} onClick={() => void recordCash('cash')}>
+                <Banknote size={18} aria-hidden />
                 Cash received
               </button>
             )}
             {settings.paymentMethods.includes('card_terminal') && (
               <button type="button" disabled={busy} onClick={() => void recordCash('card_terminal')}>
+                <CreditCard size={18} aria-hidden />
                 Card terminal paid
               </button>
             )}
@@ -135,9 +157,10 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
 
       {settings.handoverConfirmation && (
         <>
-          <h3>3. Guest confirmation</h3>
+          <StepHead n={3} done={confirmed} title="Guest confirmation" />
           {ticket.confirmation ? (
-            <div className={`notice ${ticket.confirmation.result === 'no_damage' ? 'ok' : 'warn'}`}>
+            <div className={`notice label-text ${ticket.confirmation.result === 'no_damage' ? 'ok' : 'warn'}`}>
+              {ticket.confirmation.result === 'no_damage' ? <CheckCircle2 size={18} aria-hidden /> : <AlertTriangle size={18} aria-hidden />}
               {ticket.confirmation.result === 'no_damage' ? 'Guest confirmed: car received, no damage' : 'Guest reported damage — an incident was opened'}
             </div>
           ) : (
@@ -148,6 +171,7 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
               <SignaturePad onChange={setSignature} />
               <div className="row">
                 <button type="button" className="primary" disabled={!signature || busy} onClick={() => void confirmOnDevice('no_damage')}>
+                  <PenLine size={18} aria-hidden />
                   Signed: no damage
                 </button>
               </div>
@@ -156,6 +180,7 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
                 <input value={damage} onChange={(e) => setDamage(e.target.value)} placeholder="e.g. scratch on rear bumper" />
               </label>
               <button type="button" className="danger" disabled={!damage || busy} onClick={() => void confirmOnDevice('damage_reported')}>
+                <AlertTriangle size={18} aria-hidden />
                 Record damage report
               </button>
             </div>
@@ -171,8 +196,21 @@ export function HandoverPanel({ ticket, settings, onChanged }: Props) {
       )}
       {error && <div className="notice error">{error}</div>}
       <button className="primary big" type="button" disabled={busy || !verified || blockedByBalance || needsConfirmation} onClick={() => void handover()}>
+        <Handshake size={22} aria-hidden />
         {goingOut ? 'Hand over (guest will return)' : 'Hand over and close ticket'}
       </button>
     </div>
+  );
+}
+
+function StepHead({ n, done, title }: { n: number; done: boolean; title: string }) {
+  return (
+    <h3 className="step-head">
+      <span className={`step-num${done ? ' done' : ''}`} aria-hidden>
+        {done ? <Check size={16} /> : n}
+      </span>
+      {title}
+      {done && <span className="sr-only"> (done)</span>}
+    </h3>
   );
 }

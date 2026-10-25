@@ -51,6 +51,7 @@ export function guestTicket(repo: ValetSheetsRepository, ticket: TicketRow, now:
     ticketNumber: ticket.ticket_number,
     status: ticket.status,
     plateNumber: details.vehicle?.plate_number ?? null,
+    vehicle: [details.vehicle?.colour, details.vehicle?.make, details.vehicle?.model].filter(Boolean).join(' ') || null,
     checkedInAt: ticket.checked_in_at,
     requestedAt: ticket.requested_at,
     scheduledFor: ticket.scheduled_for,
