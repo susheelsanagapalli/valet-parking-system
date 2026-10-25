@@ -1,4 +1,6 @@
+import { Check, CheckCircle2, Wallet, X } from 'lucide-react';
 import { useState } from 'react';
+import { EmptyState } from '../components/EmptyState';
 import { api } from '../api';
 import { SendSmsButton, type SmsDraft } from '../components/SendSmsButton';
 import { useAction, usePolling } from '../hooks';
@@ -22,7 +24,12 @@ export function PaymentsPage() {
 
   return (
     <div className="card">
-      <h1>QR payments to verify</h1>
+      <div className="page-title">
+        <span className="icon-tile tone-purple" aria-hidden>
+          <Wallet size={22} />
+        </span>
+        <h1>QR payments to verify</h1>
+      </div>
       {draft && (
         <div className="card stack">
           <strong>Tell the guest the payment was not found</strong>
@@ -34,11 +41,11 @@ export function PaymentsPage() {
       )}
       <p className="muted">Check each payment in your bank or UPI app: the amount and transaction reference must match.</p>
       {(error || action.error) && <div className="notice error">{error ?? action.error}</div>}
-      {data?.length === 0 && <p className="muted">Nothing waiting.</p>}
+      {data?.length === 0 && <EmptyState icon={CheckCircle2} title="Nothing waiting" hint="New QR payments from guests appear here." />}
       {data?.map(({ payment, ticket }) => (
         <div className="ticket-item" key={payment.id}>
           <div className="stack" style={{ gap: 4 }}>
-            <strong>
+            <strong className="tabular" style={{ fontSize: '1.3rem' }}>
               ₹{payment.amount}
               {payment.tip ? ` + ₹${payment.tip} tip` : ''}
             </strong>
@@ -51,9 +58,11 @@ export function PaymentsPage() {
           </div>
           <div className="stack" style={{ minWidth: 140 }}>
             <button className="primary" type="button" disabled={action.busy} onClick={() => void decide(payment.id, 'verified')}>
+              <Check size={18} aria-hidden />
               Received
             </button>
             <button className="danger" type="button" disabled={action.busy} onClick={() => void decide(payment.id, 'rejected')}>
+              <X size={18} aria-hidden />
               Not found
             </button>
           </div>

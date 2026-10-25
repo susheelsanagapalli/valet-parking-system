@@ -1,3 +1,4 @@
+import { Car, LogIn } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { TestCredentials } from '../components/TestCredentials';
@@ -19,8 +20,16 @@ export function LoginPage() {
 
   return (
     <div className="guest-shell" style={{ paddingTop: 48 }}>
-      <div className="card">
-        <h1>Staff sign in</h1>
+      <div className="card fade-in">
+        <div className="page-title">
+          <span className="icon-tile tone-info" aria-hidden>
+            <Car size={22} />
+          </span>
+          <div>
+            <h1>Staff sign in</h1>
+            <p className="muted">Valet attendant console</p>
+          </div>
+        </div>
         <form className="stack" onSubmit={(e) => void submit(e)}>
           <label>
             Username
@@ -32,6 +41,7 @@ export function LoginPage() {
           </label>
           {error && <div className="notice error">{error}</div>}
           <button className="primary big" type="submit" disabled={busy}>
+            <LogIn size={22} aria-hidden />
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
         </form>

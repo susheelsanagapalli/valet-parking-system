@@ -1,3 +1,4 @@
+import { Check, Crosshair } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { useAction } from '../hooks';
@@ -143,6 +144,7 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
         <div className="stack">
           <strong>GPS location{mark(settings.spotGps)}</strong>
           <button type="button" onClick={locate} disabled={gpsState === 'locating'}>
+            <Crosshair size={20} aria-hidden />
             {gpsState === 'locating' ? (gps ? `Improving accuracy… ±${gps.accuracyM} m` : 'Getting location…') : gps ? 'Update location' : 'Capture location'}
           </button>
           {gps && (
@@ -167,6 +169,7 @@ export function SpotForm({ ticket, settings, onDone, submitLabel = 'Save parking
 
       {error && <div className="notice error">{error}</div>}
       <button className="primary big" type="submit" disabled={busy}>
+        <Check size={22} aria-hidden />
         {busy ? 'Saving…' : submitLabel}
       </button>
     </form>
