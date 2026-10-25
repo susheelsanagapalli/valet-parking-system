@@ -1,6 +1,8 @@
-import { Car, Database, LayoutDashboard, ListOrdered, LogIn, LogOut, QrCode, Settings, Wallet, type LucideIcon } from 'lucide-react';
+import { Car, Database, LayoutDashboard, ListOrdered, LogIn, LogOut, QrCode, Settings, Wallet, WifiOff, type LucideIcon } from 'lucide-react';
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
 import { IS_BROWSER_DEMO } from '../api';
+import { useOnline } from '../online';
+import { NewLocationCard } from './Settings';
 import { useSession } from '../session';
 
 const TABS: Array<{ to: string; label: string; permission: string; icon: LucideIcon }> = [
@@ -15,7 +17,8 @@ const TABS: Array<{ to: string; label: string; permission: string; icon: LucideI
 ];
 
 export function StaffLayout() {
-  const { user, loading, locations, location, setLocationId, logout, can } = useSession();
+  const { user, loading, locations, location, setLocationId, logout, can, reloadLocations } = useSession();
+  const online = useOnline();
   if (loading) return <main className="muted">Loading…</main>;
   if (!user) return <Navigate to="/login" replace />;
 
@@ -53,7 +56,29 @@ export function StaffLayout() {
           </NavLink>
         ))}
       </nav>
-      <main>{location ? <Outlet /> : <div className="card">No locations yet. An operator admin can create one under Settings.</div>}</main>
+      {!online && (
+        <div className="notice warn label-text" role="status" style={{ borderRadius: 0, justifyContent: 'center' }}>
+          <WifiOff size={18} aria-hidden /> No internet connection. You can keep filling in forms; save when the signal is back.
+        </div>
+      )}
+      <main>
+        {location ? (
+          <Outlet />
+        ) : can('locations.manage') ? (
+          // A new installation has no locations, and every page needs one, so the first is created here.
+          <div className="stack">
+            <div className="notice warn">No locations yet. Create the first one to start.</div>
+            <NewLocationCard
+              onCreated={async (l) => {
+                await reloadLocations();
+                setLocationId(l.id);
+              }}
+            />
+          </div>
+        ) : (
+          <div className="card">No locations yet. An operator admin needs to create one first.</div>
+        )}
+      </main>
     </>
   );
 }

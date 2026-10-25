@@ -135,7 +135,12 @@ describe('test credentials (demo mode only)', () => {
   it('refuses to start production with demo data', async () => {
     const { loadConfig } = await import('../src/config.js');
     expect(() => loadConfig({ NODE_ENV: 'production', SEED_DEMO: 'true', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) })).toThrow(/SEED_DEMO/);
-    expect(loadConfig({ NODE_ENV: 'production', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32) }).demoMode).toBe(false);
+    const live = { NODE_ENV: 'production', AUTH_SECRET: 'a'.repeat(32), PIN_HMAC_SECRET: 'b'.repeat(32), STAFF_USERS_FILE: 'staff.json', PUBLIC_BASE_URL: 'https://valet.example.com' };
+    expect(loadConfig(live).demoMode).toBe(false);
+    // Go-live mistakes are refused at start-up instead of failing later.
+    expect(() => loadConfig({ ...live, STAFF_USERS_FILE: '' })).toThrow(/STAFF_USERS_FILE/);
+    expect(() => loadConfig({ ...live, PUBLIC_BASE_URL: undefined })).toThrow(/PUBLIC_BASE_URL/);
+    expect(loadConfig({ ...live, PUBLIC_BASE_URL: undefined, RENDER_EXTERNAL_URL: 'https://valet.onrender.com' }).publicBaseUrl).toBe('https://valet.onrender.com');
     expect(loadConfig({}).demoMode).toBe(true);
   });
 });
