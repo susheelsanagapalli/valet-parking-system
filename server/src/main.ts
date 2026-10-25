@@ -68,6 +68,11 @@ if (connected) {
 } else {
   await repoHolder.current.load();
 }
+if (config.production && storeName === 'memory') {
+  console.error(
+    'WARNING: production is keeping data in memory only; it is lost on every restart and deploy. Sign in as an admin and connect Google on the Data page now (needs DATA_DIR on a persistent disk), or set STORE=google.',
+  );
+}
 const repo = repoHolder.proxy();
 
 const users = config.staffUsersFile ? UserDirectory.fromFile(config.staffUsersFile, config.authSecret) : new UserDirectory(config.authSecret);

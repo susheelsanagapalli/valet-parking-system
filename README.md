@@ -2,7 +2,7 @@
 
 A cloud-hosted valet parking platform that replaces paper valet tickets with a digital ticket. It tracks every vehicle from drop-off to return and lets guests request their car from their phone.
 
-The same product can be configured for paid parking operators, restaurants, hotels and event venues. Each client runs it under their own app name and branding, sets their own rules and roles, and keeps their data in their own Google Drive and Google Sheets.
+The same product can be configured for paid parking operators, restaurants, hotels and event venues. Each client runs it under their own app name, sets their own rules and roles, and keeps their data in their own Google Drive and Google Sheets. See [Customising for each client](#customising-for-each-client) and the [go-live checklist](#go-live-checklist).
 
 ## Repository layout
 
@@ -81,7 +81,7 @@ The deployed site has a real https address, so GPS, the live QR camera and Googl
 
 The free plan sleeps after 15 minutes without visits (the first visit then takes about a minute) and forgets saved settings on every deploy, including the Google connection. To keep them, switch to the Starter plan, add a disk mounted at `/var/data`, and set `DATA_DIR=/var/data`.
 
-Until go-live the site runs in demo mode, so the sign-in page shows the test logins to anyone with the link. Don't connect real guest data while demo mode is on. At go-live set `NODE_ENV=production`, `SEED_DEMO=false` and real staff accounts (`STAFF_USERS_FILE`).
+Until go-live the site runs in demo mode, so the sign-in page shows the test logins to anyone with the link. Don't connect real guest data while demo mode is on. To go live, follow the [go-live checklist](#go-live-checklist).
 
 ## Guest SMS from your own number (free)
 
@@ -99,6 +99,169 @@ Without saved settings, the server falls back to `SMS_PROVIDER` in `server/.env`
 Failed messages are retried 3 times; the status of each message is shown under Recent SMS. Mobile numbers without a country code are treated as Indian (+91).
 
 Limits to know before go-live: messages cost whatever your SIM plan charges and are subject to its daily SMS limit (often 100 per day on prepaid plans), and Indian operators may block a personal number that sends a lot of business SMS. For larger volumes, move to a DLT-registered SMS provider (SRS FR-NOT-05).
+
+## Customising for each client
+
+### One deployment per client
+
+Every client (operator) gets **their own deployment**: their own Render service, their own staff users file, and their own Google account holding their data. Nothing is shared between clients, so one client can never see another's cars, guests or payments. Inside one deployment, a client can run as many locations as they like (for example three restaurants and a hotel).
+
+To add a client: create a new Render service from this repository (**New → Blueprint**, give it a different name such as `valet-<client>`), then follow the [go-live checklist](#go-live-checklist) for that service. Every service runs the same code, so one push to `main` updates all clients.
+
+### What each client can change in the app (no code)
+
+Sign in as an `operator_admin`:
+
+| What | Where |
+| --- | --- |
+| Locations: name, address, service profile (restaurant, paid parking, hotel, event venue, custom) | **Settings → New location** (on a new installation this form appears on the first screen) |
+| App name shown to guests and in SMS (e.g. "MallValet") | **Settings → New location → App name**, set per location when it is created |
+| Ticket number prefix (e.g. `PM` gives PM0001) | **Settings → New location → Ticket prefix** |
+| Parking spot capture: text, GPS, photo (off, optional, required), zone/slot list, GPS accuracy needed | **Settings → Parking spot** |
+| Vehicle photos, guest damage confirmation, "I'll arrive in…" options, pickup points, average retrieval time | **Settings** |
+| Tariff (complimentary, flat, hourly with free minutes and daily cap) and payment methods | **Settings → Charges and payment** |
+| The client's own UPI payment QR (approved by a platform admin before guests see it) | **Settings → Payment QR** |
+| SMS sender number | **Settings → Guest SMS** |
+| Staff accounts and roles | The staff users file (`npm run staff-user`, see the checklist) |
+
+Settings changes apply to new tickets; cars already checked in keep the rules they arrived with. The app name and ticket prefix can't be changed after a location is created yet; create a new location instead.
+
+### What needs a code change today
+
+Logo, brand colours and the browser tab title are the same for every client in this build (the SRS lists white-label branding for v1.0, but it is not built yet). Until it is, change them per deployment here:
+
+| What | File |
+| --- | --- |
+| Brand colours (top bar, buttons, guest page header) | `web/src/styles.css`: `--brand`, `--accent`, `--hero-from`, `--hero-to` under `:root` (and the dark-mode block below it) |
+| Browser tab title and phone status-bar colour | `web/index.html`: `<title>` and `theme-color` |
+| Logo (currently a car icon) | `web/src/pages/StaffLayout.tsx` and `web/src/pages/GuestTicket.tsx` (`brand-mark`) |
+
+A code change applies to every deployment built from that branch, so per-client colours mean a branch per client. Building branding as a per-location setting would remove that.
+
+### Customising the demo site
+
+The GitHub Pages demo is one shared site for showing the product; never put real client data on it.
+
+- **For one sales meeting:** open the demo, sign in as `admin`, and create a location with the client's name, app name and ticket prefix under **Settings → New location**, then pick their service profile and tariff. This stays in that browser only, so do it on the device you present from. **Reset demo data** removes it.
+- **For everyone who opens the demo:** edit the demo locations and parked cars in `server/src/seedData.ts` (names, app name, ticket prefix, service profile, sample cars), then push to `main`. Visitors who opened the demo before keep their saved data until they press **Reset demo data**.
+
+## GPS: accuracy and poor signal
+
+### How capture works
+
+When an attendant taps **Capture location**, the phone is watched for up to **30 seconds** and the most accurate reading is kept. It stops by itself as soon as a reading is within the location's **GPS accuracy needed** (default 20 m, set under **Settings → Parking spot**). While it is still improving, **Use this reading (±N m)** stops early and keeps the best reading so far. Old positions cached by the phone are never used, because the attendant has just driven the car and an older reading would point to the road, not the spot.
+
+If the reading is worse than the accuracy needed, or there is no reading at all, the spot description (landmark) becomes required, so a spot is never saved with only a bad position. The guest never sees GPS; attendants get a **Map** link with walking directions to the car.
+
+### Why readings are poor, and what the app tells the attendant
+
+| Situation | What happens | What to do |
+| --- | --- | --- |
+| Underground or indoor parking | Satellites can't be seen; after 30 s: "No GPS fix within 30 seconds" | Describe the spot (level, pillar, bay). For basements, switch GPS to **Optional** and turn on the **zone/slot list** or make the text field **Required**. |
+| Near tall buildings or under a roof | Readings of 20–60 m; landmark becomes required | Take the reading in the open next to the car, or add a landmark. |
+| iPhone with **Precise Location** off, or Android with **Google Location Accuracy** off | Readings of 500 m or more; the app explains how to switch it on | iPhone: Settings → Privacy & Security → Location Services → Safari Websites → Precise Location on. Android: Settings → Location → Location services → Google Location Accuracy on. |
+| Location permission refused | "Location permission is off" with the steps for iPhone and Android | Allow location for the site, then reload. |
+| No mobile data | GPS still works (satellites don't need internet), but the first fix can take up to 30 s. A banner says the phone is offline | Wait for the fix; save once there is signal. |
+| Signal lost while saving | "No internet connection. Nothing you entered is lost" and the form keeps everything | Walk to where there is signal and tap **Save parking spot** again. |
+| Site opened over plain `http` on a phone | Phones refuse GPS on insecure pages; the app says so | Use the https address (the live site is always https). |
+
+### Checks before go-live for each location
+
+1. Stand where cars are parked (every level, if there are several) and capture a test location on each attendant phone. Note the accuracy shown.
+2. Open **Settings → Parking spot** and set **GPS accuracy needed** just above what you saw in the open areas (20–30 m suits most open car parks).
+3. If any area gives no fix or more than 50 m (basements, covered decks), make the text field **Required** or use the zone/slot list there.
+4. On each phone, switch on Precise Location (iPhone) or Google Location Accuracy (Android), and allow location for the site.
+
+## Go-live checklist
+
+Do this once per client deployment. Steps 1–7 are set-up, step 8 is the test before real cars, step 9 is the switch.
+
+### 1. Choose a plan that keeps data
+
+The Render **free** plan sleeps after 15 minutes (the first attendant of the day waits about a minute) and forgets everything stored on its disk at every deploy. For a live client:
+
+- [ ] Switch the service to the **Starter** plan (or higher).
+- [ ] Add a **disk** mounted at `/var/data` (Service → Disks).
+- [ ] Set the environment variable `DATA_DIR=/var/data`. The Google connection, SMS settings, uploaded photos and the pending-writes queue are kept there.
+
+### 2. Create the staff accounts
+
+On your computer, in this repository:
+
+```bash
+npm install && npm run build
+npm run staff-user -- --file staff-users.json --username owner --name "Owner Name" --role operator_admin
+npm run staff-user -- --file staff-users.json --username ravi --name "Ravi" --role attendant
+npm run staff-user -- --file staff-users.json --list
+```
+
+Each command asks for the password without showing it (at least 10 characters) and stores only a scrypt hash. Roles: `operator_admin`, `location_manager`, `supervisor`, `attendant`, `merchant_validator`, and `platform_admin` for your own team. Add `--locations <id>,<id>` to limit someone to certain locations (the ID is shown at the top of **Settings** once the location exists); without it they can work at all locations. Change a password by running the same command again; remove someone with `--remove <username>`.
+
+- [ ] In Render: **Environment → Secret Files → Add**, file name `staff-users.json`, paste the file's contents.
+- [ ] Set `STAFF_USERS_FILE=/etc/secrets/staff-users.json`.
+- [ ] Don't commit `staff-users.json` to git. Store it safely; it is the only list of accounts.
+
+After any change to the file, update the secret file and redeploy (or restart) the service.
+
+### 3. Switch off demo mode
+
+- [ ] Set `NODE_ENV=production`.
+- [ ] Set `SEED_DEMO=false`.
+- [ ] Keep the `AUTH_SECRET` and `PIN_HMAC_SECRET` that Render generated. **Never change them after go-live**: a new `AUTH_SECRET` signs everyone out, and a new `PIN_HMAC_SECRET` makes the handover PIN of every car on site stop working.
+- [ ] Using a custom domain (e.g. `valet.client.com`)? Add it in Render and set `PUBLIC_BASE_URL=https://valet.client.com`. Guest ticket links in SMS are built from it. Without a custom domain, Render's address is used automatically.
+
+The server refuses to start in production without `STAFF_USERS_FILE`, without a public address, with `SEED_DEMO=true`, or with missing secrets, and names the setting in the log.
+
+### 4. Connect the client's Google account (where the data lives)
+
+Until this is done, production keeps data **in memory only and loses it on every restart and deploy**; the server log warns about it at start-up.
+
+- [ ] In the client's Google account, open https://console.cloud.google.com, create a project, enable the **Google Drive API** and **Google Sheets API**.
+- [ ] Create an **OAuth client** (Web application) with the redirect URI `https://<your-service-address>/api/google/callback`.
+- [ ] On the **OAuth consent screen**, set the publishing status to **In production**. In "Testing", Google stops the connection after 7 days. The app only asks for `drive.file` (files it creates), so Google's review is not needed.
+- [ ] Sign in to the app as the operator admin, open **Data**, paste the client ID and secret, and click **Connect Google account** while signed in to the client's Google account.
+- [ ] Check that a "Valet data" folder with four spreadsheets appeared in their Google Drive, then click **Back up now** once.
+- [ ] Share the folder with the client's manager or accountant from the **Data** page if they need it.
+
+Alternative without a disk: set up the spreadsheets with the `sheets-integration` scripts and set `STORE=google` plus the Google variables in the environment (see [its README](sheets-integration/README.md)), and set `PHOTO_STORAGE=google_drive` so photos aren't kept on the server.
+
+### 5. Set up the locations
+
+Sign in as the operator admin. A new installation opens on **New location**.
+
+- [ ] Create each location with the client's name, address, service profile, **app name** and **ticket prefix**. These two can't be changed later.
+- [ ] Go through **Settings** for each location: parking spot capture (see [GPS checks](#checks-before-go-live-for-each-location)), vehicle photos, pickup points, arrival options, average retrieval time, tariff and payment methods.
+- [ ] Upload the client's **UPI payment QR** with the payee name exactly as UPI apps show it. A `platform_admin` checks the payee and approves it under **QR approvals**; guests only see it after that.
+
+### 6. Set up guest SMS
+
+- [ ] **Settings → Guest SMS**: enter the sender number and choose iPhone (tap-to-send) or Android (gateway app), as described in [Guest SMS](#guest-sms-from-your-own-number-free).
+- [ ] **Send a test SMS** to your own phone and open the link in it: it must open the guest page on the live address.
+- [ ] Check the SIM plan's daily SMS limit against the expected number of cars.
+
+### 7. Prepare the attendants' phones
+
+- [ ] Open the live address on each phone and **Add to Home Screen**.
+- [ ] Allow location and camera for the site; switch on Precise Location (iPhone) or Google Location Accuracy (Android).
+- [ ] Sign each attendant in with their own account (never share accounts: the audit log records who did what).
+
+### 8. Test with one real car before opening
+
+- [ ] `https://<your-service-address>/api/health` shows `"ok":true` and the commit you expect.
+- [ ] The sign-in page has **no Test credentials** panel, and `attendant` / `valet123` is refused.
+- [ ] Check in a test car with your own mobile number; the SMS arrives with the link and PIN.
+- [ ] Record the spot at the real parking area (GPS accuracy as expected, or a landmark).
+- [ ] From the guest link: request the car; in **Queue** accept it, mark it at the pickup point, verify the PIN, take payment (QR verified under **Payments**, or cash), get the "no damage" confirmation and hand over.
+- [ ] The receipt SMS arrives, and the ticket appears in the Transactions spreadsheet in Google Drive.
+- [ ] Restart the service in Render; sign in again and check the test ticket and settings are still there.
+
+### 9. Go live
+
+- [ ] Remove the test ticket's data if the client wants a clean start (Data → Download Excel first, then clean the rows in the spreadsheets), or keep it as a record.
+- [ ] Tell the attendants the date and give them their usernames.
+- [ ] After the first day: check **Dashboard**, **Payments** and **Data → Back up now**.
+
+Not yet built, so plan around them: WhatsApp messages and overdue reminders, user and role management screens (users come from the staff users file), automatic deletion of photos and personal data, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
 
 ## What works in this build
 

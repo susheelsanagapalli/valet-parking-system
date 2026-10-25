@@ -12,6 +12,7 @@
     "test": "npm run build -w sheets-integration && npm test -w sheets-integration && npm test -w server",
     "typecheck": "npm run typecheck --workspaces",
     "start": "node --env-file-if-exists=server/.env server/dist/main.js",
+    "staff-user": "node server/dist/cli/staffUser.js",
     "dev:server": "npm run build -w sheets-integration && npm run dev -w server",
     "dev:web": "npm run dev -w web"
   },

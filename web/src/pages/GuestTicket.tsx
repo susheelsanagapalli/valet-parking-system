@@ -1,5 +1,5 @@
 import QRCode from 'qrcode';
-import { AlertTriangle, Car, CheckCircle2, Clock, CreditCard, Hash, MapPin, Navigation, QrCode, Undo2, Zap, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, Car, CheckCircle2, Clock, CreditCard, Hash, MapPin, Navigation, QrCode, Undo2, WifiOff, Zap, type LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
@@ -8,6 +8,7 @@ import { StarInput, StarsShown } from '../components/StarRating';
 import { StatusBadge } from '../components/TicketSummary';
 import { formatDuration, formatRupees, formatTime, minutesSince } from '../format';
 import { useAction, usePolling } from '../hooks';
+import { useOnline } from '../online';
 import { STATUS_LABEL, type GuestTicket } from '../types';
 
 const STEPS: ReadonlyArray<{ status: 'parked' | 'retrieval_requested' | 'assigned_in_transit' | 'ready_for_pickup'; icon: LucideIcon }> = [
@@ -29,6 +30,7 @@ export function GuestTicketPage() {
   const [reportingDamage, setReportingDamage] = useState(false);
   const [stars, setStars] = useState(0);
   const [comment, setComment] = useState('');
+  const online = useOnline();
 
   useEffect(() => {
     void QRCode.toDataURL(window.location.href, { margin: 1, width: 400 }).then(setQr);
@@ -81,6 +83,11 @@ export function GuestTicketPage() {
       </header>
 
       <div className="guest-body">
+        {!online && (
+          <div className="notice warn label-text" role="status">
+            <WifiOff size={18} aria-hidden /> No internet connection. Your ticket is still valid; this page updates when the signal is back.
+          </div>
+        )}
         {stepIndex >= 0 && (
           <div className="card raised">
             <div className="steps" aria-label="Progress">

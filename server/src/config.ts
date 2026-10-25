@@ -75,6 +75,12 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   // Hosts such as Render provide https and the public address themselves.
   const hostedUrl = env.RENDER_EXTERNAL_URL?.replace(/\/$/, '');
+  if (production && !env.STAFF_USERS_FILE) {
+    throw new Error('STAFF_USERS_FILE must be set in production: without it nobody can sign in (create it with "npm run staff-user")');
+  }
+  if (production && !env.PUBLIC_BASE_URL && !hostedUrl) {
+    throw new Error('PUBLIC_BASE_URL must be set in production: guest ticket links in SMS are built from it');
+  }
   const httpsPort = env.HTTPS_PORT === 'off' || hostedUrl ? undefined : env.HTTPS_PORT ? Number(env.HTTPS_PORT) : production ? undefined : 8443;
   // Folder for files the server writes (Google connection, SMS settings, write queue, uploads, certificates).
   const dataDir = env.DATA_DIR ?? '.';

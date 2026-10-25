@@ -68,6 +68,9 @@ export function SettingsPage() {
         <p className="muted" style={{ margin: 0 }}>
           Changes apply to new tickets. Cars already checked in keep the rules they arrived with.
         </p>
+        <p className="muted" style={{ margin: 0 }}>
+          Location ID (to limit staff accounts to this location): <code className="mono wrap">{location?.id}</code>
+        </p>
 
         <h2>Parking spot</h2>
         <div className="grid">
@@ -269,7 +272,7 @@ function PaymentQrCard({ locationId, current, onSaved }: { locationId: string; c
   );
 }
 
-function NewLocationCard({ onCreated }: { onCreated: (l: LocationRow) => Promise<void> }) {
+export function NewLocationCard({ onCreated }: { onCreated: (l: LocationRow) => Promise<void> }) {
   const [form, setForm] = useState({ name: '', address: '', serviceProfile: 'restaurant', appName: 'ValetPay', ticketPrefix: '' });
   const { busy, error, run } = useAction();
 
