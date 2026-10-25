@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { IS_BROWSER_DEMO } from './api';
+import { AccountPage } from './pages/Account';
 import { CarsPage } from './pages/Cars';
 import { CheckInPage } from './pages/CheckIn';
 import { DashboardPage } from './pages/Dashboard';
@@ -10,6 +11,7 @@ import { PaymentsPage } from './pages/Payments';
 import { QrApprovalsPage } from './pages/QrApprovals';
 import { QueuePage } from './pages/Queue';
 import { SettingsPage } from './pages/Settings';
+import { StaffPage } from './pages/Staff';
 import { StaffHome, StaffLayout } from './pages/StaffLayout';
 
 /** Shown on the GitHub Pages demo, where the server runs inside the browser. */
@@ -47,6 +49,8 @@ function AppRoutes() {
         <Route path="settings" element={<SettingsPage />} />
         <Route path="qr-approvals" element={<QrApprovalsPage />} />
         <Route path="data" element={<DataPage />} />
+        <Route path="staff" element={<StaffPage />} />
+        <Route path="account" element={<AccountPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/staff" replace />} />
     </Routes>

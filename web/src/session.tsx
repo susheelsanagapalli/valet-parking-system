@@ -9,6 +9,8 @@ interface Session {
   location: LocationRow | null;
   setLocationId: (id: string) => void;
   login: (username: string, password: string) => Promise<void>;
+  /** Changes the signed-in user's password; other devices are signed out, this one stays signed in. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
   can: (permission: string) => boolean;
   reloadLocations: () => Promise<void>;
@@ -73,6 +75,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setToken(res.token);
         setUser(res.user);
         setLocations(await api<LocationRow[]>('/locations'));
+      },
+      changePassword: async (currentPassword, newPassword) => {
+        const res = await api<{ token: string; user: User }>('/auth/change-password', { body: { currentPassword, newPassword } });
+        setToken(res.token);
+        setUser(res.user);
       },
       logout,
       can: (p) => Boolean(user?.permissions.includes(p)),

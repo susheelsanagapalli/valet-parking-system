@@ -7,8 +7,34 @@ export interface User {
   username: string;
   name: string;
   role: string;
+  roleName: string;
   locations: string[] | 'all';
   permissions: string[];
+  /** The password was set by an admin; the user must choose their own before using the app. */
+  mustChangePassword?: boolean;
+  disabled?: boolean;
+  passwordChangedAt?: string;
+}
+
+/** A row on the Staff page. */
+export interface StaffRow extends User {
+  manageable: boolean;
+  self: boolean;
+}
+
+export interface RoleInfo {
+  id: string;
+  name: string;
+  description: string;
+  builtIn: boolean;
+  permissions: string[];
+  users: number;
+  manageable: boolean;
+}
+
+export interface RolesResponse {
+  roles: RoleInfo[];
+  permissions: Array<{ id: string; label: string; grantable: boolean }>;
 }
 
 export interface StaffTicket {

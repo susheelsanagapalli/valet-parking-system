@@ -1,8 +1,9 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import type { NextFunction, Request, Response } from 'express';
 
-import { can, type Permission, type StaffUser, type UserAuth } from './permissions.js';
+import { allowedBeforePasswordChange, can, type Permission, type StaffUser, type UserAuth } from './permissions.js';
+import { StaffDirectory, type PasswordHasher, type StaffData, type TokenCodec, type TokenPayload } from './staffDirectory.js';
 
 export * from './permissions.js';
 
@@ -19,74 +20,63 @@ export function checkPassword(password: string, stored: string): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
+const scrypt: PasswordHasher = { hash: hashPassword, check: checkPassword };
 
+function hmacTokens(secret: string): TokenCodec {
+  return {
+    sign(payload) {
+      const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+      return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
+    },
+    read(token) {
+      const [body, sig] = token.split('.');
+      if (!body || !sig) return undefined;
+      const expected = createHmac('sha256', secret).update(body).digest('base64url');
+      if (sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return undefined;
+      try {
+        return JSON.parse(Buffer.from(body, 'base64url').toString()) as TokenPayload;
+      } catch {
+        return undefined;
+      }
+    },
+  };
+}
 
+/** Reads a staff file: the full {users, roles} the server saves, or a plain list of users (npm run staff-user). */
+export function readStaffFile(path: string): StaffData {
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as StaffData | StaffData['users'];
+  return Array.isArray(parsed) ? { users: parsed, roles: [] } : { users: parsed.users ?? [], roles: parsed.roles ?? [] };
+}
 
-const LOCK_AFTER = 5;
-const LOCK_MS = 15 * 60_000;
-const TOKEN_TTL_MS = 12 * 60 * 60_000;
+/** Writes through a temporary file, so a crash mid-write never leaves a half-written staff file. */
+function writeStaffFile(path: string, data: StaffData): void {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, path);
+}
 
-/** Staff accounts, sign-in with lockout (NFR-SEC-03) and signed session tokens. */
-export class UserDirectory implements UserAuth {
-  private readonly users = new Map<string, StaffUser>();
-  private readonly failures = new Map<string, { count: number; lockedUntil: number }>();
-
-  constructor(
-    private readonly secret: string,
-    users: StaffUser[] = [],
-    private readonly now: () => number = Date.now,
-  ) {
-    for (const u of users) this.add(u);
+/** Staff accounts on the server: scrypt passwords, HMAC-signed session tokens, optionally saved to a file. */
+export class UserDirectory extends StaffDirectory {
+  constructor(secret: string, users: StaffUser[] = [], now: () => number = Date.now, options: { roles?: StaffData['roles']; savePath?: string } = {}) {
+    const savePath = options.savePath;
+    super({ hasher: scrypt, tokens: hmacTokens(secret), now, onChange: savePath ? (data) => writeStaffFile(savePath, data) : undefined }, { users, roles: options.roles });
   }
 
   static fromFile(path: string, secret: string): UserDirectory {
-    return new UserDirectory(secret, JSON.parse(readFileSync(path, 'utf8')) as StaffUser[]);
+    const data = readStaffFile(path);
+    return new UserDirectory(secret, data.users, Date.now, { roles: data.roles });
   }
 
-  add(user: StaffUser): void {
-    this.users.set(user.id, user);
-  }
-
-  get size(): number {
-    return this.users.size;
-  }
-
-  list(): StaffUser[] {
-    return [...this.users.values()];
-  }
-
-  byId(id: string): StaffUser | undefined {
-    return this.users.get(id);
-  }
-
-  /** Returns a token, or a reason the sign-in was refused. */
-  login(username: string, password: string): { token: string; user: StaffUser } | { error: 'invalid' | 'locked' } {
-    const key = username.trim().toLowerCase();
-    const state = this.failures.get(key);
-    if (state && state.lockedUntil > this.now()) return { error: 'locked' };
-    const user = [...this.users.values()].find((u) => u.username.toLowerCase() === key);
-    if (!user || !checkPassword(password, user.passwordHash)) {
-      const count = (state && state.lockedUntil <= this.now() && state.count >= LOCK_AFTER ? 0 : state?.count ?? 0) + 1;
-      this.failures.set(key, { count, lockedUntil: count >= LOCK_AFTER ? this.now() + LOCK_MS : 0 });
-      return { error: count >= LOCK_AFTER ? 'locked' : 'invalid' };
-    }
-    this.failures.delete(key);
-    return { token: this.sign({ sub: user.id, exp: this.now() + TOKEN_TTL_MS }), user };
-  }
-
-  sign(payload: { sub: string; exp: number }): string {
-    const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-    return `${body}.${createHmac('sha256', this.secret).update(body).digest('base64url')}`;
-  }
-
-  verify(token: string): StaffUser | undefined {
-    const [body, sig] = token.split('.');
-    if (!body || !sig) return undefined;
-    const expected = createHmac('sha256', this.secret).update(body).digest('base64url');
-    if (sig.length !== expected.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return undefined;
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as { sub: string; exp: number };
-    if (payload.exp < this.now()) return undefined;
-    return this.users.get(payload.sub);
+  /**
+   * Accounts kept in `savePath` and saved there after every change made in the app. The first time
+   * (no file yet), they are copied from `bootstrapPath` (STAFF_USERS_FILE), which is read-only.
+   */
+  static open(secret: string, savePath: string, bootstrapPath?: string): { users: UserDirectory; source: 'saved' | 'bootstrap' | 'empty' } {
+    const source = existsSync(savePath) ? 'saved' : bootstrapPath ? 'bootstrap' : 'empty';
+    const data = source === 'saved' ? readStaffFile(savePath) : source === 'bootstrap' ? readStaffFile(bootstrapPath!) : { users: [], roles: [] };
+    const users = new UserDirectory(secret, data.users, Date.now, { roles: data.roles, savePath });
+    if (source === 'bootstrap') writeStaffFile(savePath, users.data());
+    return { users, source };
   }
 }
 
@@ -99,12 +89,18 @@ declare global {
   }
 }
 
+export const PASSWORD_CHANGE_REQUIRED = 'Choose a new password before continuing';
+
 export function authenticate(directory: UserAuth) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const header = req.header('authorization') ?? '';
     const user = header.startsWith('Bearer ') ? directory.verify(header.slice(7)) : undefined;
     if (!user) {
       res.status(401).json({ error: 'Sign in required' });
+      return;
+    }
+    if (user.mustChangePassword && !allowedBeforePasswordChange(req.method, req.path.replace(/^\/api/, ''))) {
+      res.status(403).json({ error: PASSWORD_CHANGE_REQUIRED, code: 'PASSWORD_CHANGE_REQUIRED' });
       return;
     }
     req.user = user;

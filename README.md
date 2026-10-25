@@ -104,7 +104,7 @@ Limits to know before go-live: messages cost whatever your SIM plan charges and 
 
 ### One deployment per client
 
-Every client (operator) gets **their own deployment**: their own Render service, their own staff users file, and their own Google account holding their data. Nothing is shared between clients, so one client can never see another's cars, guests or payments. Inside one deployment, a client can run as many locations as they like (for example three restaurants and a hotel).
+Every client (operator) gets **their own deployment**: their own Render service, their own staff accounts, and their own Google account holding their data. Nothing is shared between clients, so one client can never see another's cars, guests or payments. Inside one deployment, a client can run as many locations as they like (for example three restaurants and a hotel).
 
 To add a client: create a new Render service from this repository (**New → Blueprint**, give it a different name such as `valet-<client>`), then follow the [go-live checklist](#go-live-checklist) for that service. Every service runs the same code, so one push to `main` updates all clients.
 
@@ -122,7 +122,7 @@ Sign in as an `operator_admin`:
 | Tariff (complimentary, flat, hourly with free minutes and daily cap) and payment methods | **Settings → Charges and payment** |
 | The client's own UPI payment QR (approved by a platform admin before guests see it) | **Settings → Payment QR** |
 | SMS sender number | **Settings → Guest SMS** |
-| Staff accounts and roles | The staff users file (`npm run staff-user`, see the checklist) |
+| Staff accounts, roles (built-in or custom) and which locations each person can use | **Staff** (see [Staff accounts and roles](#staff-accounts-and-roles)) |
 
 Settings changes apply to new tickets; cars already checked in keep the rules they arrived with. The app name and ticket prefix can't be changed after a location is created yet; create a new location instead.
 
@@ -144,6 +144,43 @@ The GitHub Pages demo is one shared site for showing the product; never put real
 
 - **For one sales meeting:** open the demo, sign in as `admin`, and create a location with the client's name, app name and ticket prefix under **Settings → New location**, then pick their service profile and tariff. This stays in that browser only, so do it on the device you present from. **Reset demo data** removes it.
 - **For everyone who opens the demo:** edit the demo locations and parked cars in `server/src/seedData.ts` (names, app name, ticket prefix, service profile, sample cars), then push to `main`. Visitors who opened the demo before keep their saved data until they press **Reset demo data**.
+
+## Staff accounts and roles
+
+### Demo and production
+
+| | Demo (GitHub Pages, or a server with `SEED_DEMO=true`) | Production (`NODE_ENV=production`) |
+| --- | --- | --- |
+| Sign-in page | Shows a **Test credentials** panel with every demo login (password `valet123`) | No credentials shown; demo logins don't exist |
+| Accounts | Demo users, plus any you add on the **Staff** page | The first admin from `STAFF_USERS_FILE`, then everyone added on the **Staff** page |
+| Where changes are saved | Pages demo: that browser only. Server in demo mode: memory, unless `DATA_DIR` is set | `staff.json` in `DATA_DIR` (keep it on a persistent disk) |
+
+### Who can manage staff
+
+The **Staff** tab appears for anyone with the permission "Manage staff accounts and roles": **platform admins** and **operator admins** by default, or a custom role that includes it.
+
+- An admin can only manage people whose role has **no more permissions than their own**, and only give access to **locations they work at themselves**. So an operator admin can't create, change or reset a platform admin, and can't hand out the "Approve payment QRs" permission.
+- Nobody can switch off, delete or change the role or locations of **their own** account, so an admin can't lock themselves out by accident.
+
+### Adding a user
+
+1. **Staff → Users → Add user**: full name, username (can't be changed later), role, and locations ("All locations" or tick specific ones).
+2. A starting password is generated (you can type your own, at least 10 characters). Click **Create user**.
+3. The sign-in details are shown **once**, with a **Copy** button. Give them to the person privately.
+4. At first sign-in they must choose their own password before they can use anything. Until then the list shows **Must set password**.
+
+### Roles
+
+- **Built-in roles** (platform admin, operator admin, location manager, supervisor, attendant, merchant validator) can't be changed.
+- **Staff → Roles → New role** creates a custom role: give it a name (e.g. "Night supervisor") and tick exactly what it can do. Permissions you don't have yourself are greyed out.
+- Changing a custom role's permissions applies to its users immediately. A role can only be deleted when nobody has it.
+
+### Passwords
+
+- **Users change their own password** by clicking their name in the top bar → **Change password**. They need the current one. Their other devices are signed out; the device they're using stays signed in.
+- **Forgotten password:** an admin opens **Staff → Password** next to the person, and gives them the new starting password. Their open sessions end, and they must choose a new one at next sign-in.
+- **Someone leaves:** **Switch off** ends their sessions immediately and blocks sign-in; **Switch on** restores the account. **Delete** removes it for good.
+- Only scrypt hashes are stored, never passwords. Five wrong passwords lock the account for 15 minutes.
 
 ## GPS: accuracy and poor signal
 
@@ -182,26 +219,24 @@ The Render **free** plan sleeps after 15 minutes (the first attendant of the day
 
 - [ ] Switch the service to the **Starter** plan (or higher).
 - [ ] Add a **disk** mounted at `/var/data` (Service → Disks).
-- [ ] Set the environment variable `DATA_DIR=/var/data`. The Google connection, SMS settings, uploaded photos and the pending-writes queue are kept there.
+- [ ] Set the environment variable `DATA_DIR=/var/data`. Staff accounts and roles (`staff.json`), the Google connection, SMS settings, uploaded photos and the pending-writes queue are kept there. Without a disk, accounts added in the app are lost at the next deploy.
 
-### 2. Create the staff accounts
+### 2. Create the first admin account
 
-On your computer, in this repository:
+Only the first account is made outside the app; everyone else is added on the **Staff** page (step 7). On your computer, in this repository:
 
 ```bash
 npm install && npm run build
 npm run staff-user -- --file staff-users.json --username owner --name "Owner Name" --role operator_admin
-npm run staff-user -- --file staff-users.json --username ravi --name "Ravi" --role attendant
-npm run staff-user -- --file staff-users.json --list
 ```
 
-Each command asks for the password without showing it (at least 10 characters) and stores only a scrypt hash. Roles: `operator_admin`, `location_manager`, `supervisor`, `attendant`, `merchant_validator`, and `platform_admin` for your own team. Add `--locations <id>,<id>` to limit someone to certain locations (the ID is shown at the top of **Settings** once the location exists); without it they can work at all locations. Change a password by running the same command again; remove someone with `--remove <username>`.
+It asks for the password without showing it (at least 10 characters) and stores only a scrypt hash. Use `--role platform_admin` instead for your own team's account (platform admins can also approve payment QRs and manage operator admins).
 
 - [ ] In Render: **Environment → Secret Files → Add**, file name `staff-users.json`, paste the file's contents.
 - [ ] Set `STAFF_USERS_FILE=/etc/secrets/staff-users.json`.
-- [ ] Don't commit `staff-users.json` to git. Store it safely; it is the only list of accounts.
+- [ ] Don't commit `staff-users.json` to git.
 
-After any change to the file, update the secret file and redeploy (or restart) the service.
+On the first start the server copies these accounts to `staff.json` in `DATA_DIR`, and from then on saves every change made in the app there (new users, roles, password changes). `STAFF_USERS_FILE` is only read again if `staff.json` is missing, so after go-live manage accounts in the app, not in the file. Include `staff.json` in your backups of the disk.
 
 ### 3. Switch off demo mode
 
@@ -210,7 +245,7 @@ After any change to the file, update the secret file and redeploy (or restart) t
 - [ ] Keep the `AUTH_SECRET` and `PIN_HMAC_SECRET` that Render generated. **Never change them after go-live**: a new `AUTH_SECRET` signs everyone out, and a new `PIN_HMAC_SECRET` makes the handover PIN of every car on site stop working.
 - [ ] Using a custom domain (e.g. `valet.client.com`)? Add it in Render and set `PUBLIC_BASE_URL=https://valet.client.com`. Guest ticket links in SMS are built from it. Without a custom domain, Render's address is used automatically.
 
-The server refuses to start in production without `STAFF_USERS_FILE`, without a public address, with `SEED_DEMO=true`, or with missing secrets, and names the setting in the log.
+The server refuses to start in production without staff accounts (`STAFF_USERS_FILE` or a saved `staff.json`), without a public address, with `SEED_DEMO=true`, or with missing secrets, and names the setting in the log. In production the sign-in page never shows test credentials and the demo logins don't exist.
 
 ### 4. Connect the client's Google account (where the data lives)
 
@@ -239,21 +274,24 @@ Sign in as the operator admin. A new installation opens on **New location**.
 - [ ] **Send a test SMS** to your own phone and open the link in it: it must open the guest page on the live address.
 - [ ] Check the SIM plan's daily SMS limit against the expected number of cars.
 
-### 7. Prepare the attendants' phones
+### 7. Add the staff and prepare their phones
 
+- [ ] If the client needs roles beyond the built-in ones, create them under **Staff → Roles** first.
+- [ ] Add every person under **Staff → Users → Add user** with their role and locations, and give each their sign-in details privately ([details](#adding-a-user)). Never share accounts: the audit log records who did what.
 - [ ] Open the live address on each phone and **Add to Home Screen**.
 - [ ] Allow location and camera for the site; switch on Precise Location (iPhone) or Google Location Accuracy (Android).
-- [ ] Sign each attendant in with their own account (never share accounts: the audit log records who did what).
+- [ ] Each person signs in once and chooses their own password.
 
 ### 8. Test with one real car before opening
 
 - [ ] `https://<your-service-address>/api/health` shows `"ok":true` and the commit you expect.
 - [ ] The sign-in page has **no Test credentials** panel, and `attendant` / `valet123` is refused.
+- [ ] A new user you added can sign in, is asked to choose a password, and only sees the tabs their role allows.
 - [ ] Check in a test car with your own mobile number; the SMS arrives with the link and PIN.
 - [ ] Record the spot at the real parking area (GPS accuracy as expected, or a landmark).
 - [ ] From the guest link: request the car; in **Queue** accept it, mark it at the pickup point, verify the PIN, take payment (QR verified under **Payments**, or cash), get the "no damage" confirmation and hand over.
 - [ ] The receipt SMS arrives, and the ticket appears in the Transactions spreadsheet in Google Drive.
-- [ ] Restart the service in Render; sign in again and check the test ticket and settings are still there.
+- [ ] Restart the service in Render; sign in again and check the test ticket, settings and staff accounts are still there.
 
 ### 9. Go live
 
@@ -261,7 +299,7 @@ Sign in as the operator admin. A new installation opens on **New location**.
 - [ ] Tell the attendants the date and give them their usernames.
 - [ ] After the first day: check **Dashboard**, **Payments** and **Data → Back up now**.
 
-Not yet built, so plan around them: WhatsApp messages and overdue reminders, user and role management screens (users come from the staff users file), automatic deletion of photos and personal data, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
+Not yet built, so plan around them: WhatsApp messages and overdue reminders, password reset by email (an admin resets it on the **Staff** page), automatic deletion of photos and personal data, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
 
 ## What works in this build
 
@@ -273,8 +311,9 @@ Not yet built, so plan around them: WhatsApp messages and overdue reminders, use
 - Supervisor verification of QR payments; platform admin approval of each location's payment QR
 - Location settings editor and new locations from service profiles
 - Staff sign-in with lockout after 5 failed attempts, built-in roles and permission checks on every API call
+- Staff page for admins: add users with a role and locations and a starting password, custom roles with chosen permissions, password reset, switch off and delete; users choose their own password at first sign-in and can change it under their account
 
-Not yet built: WhatsApp messages and overdue reminders, user and custom role management screens (users come from a JSON file or the demo seed), photo and personal data deletion jobs, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
+Not yet built: WhatsApp messages and overdue reminders, password reset by email, photo and personal data deletion jobs, capacity alert emails, monthly spreadsheet rollover, and the abandoned vehicle process.
 
 ## Documents
 
