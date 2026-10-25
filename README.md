@@ -55,7 +55,10 @@ npm test             # data layer and API tests
 
 ## Live demo on GitHub Pages
 
-**https://susheelsanagapalli.github.io/valet-parking-system/** is published by `.github/workflows/pages.yml` on every push to `main` (after the tests pass).
+The demo is published on every push to `main`, after the tests pass:
+
+- **https://valetpay-demo.netlify.app**: the main demo address, published by `.github/workflows/netlify.yml`. It needs the repository secrets `NETLIFY_AUTH_TOKEN` (a Netlify personal access token) and `NETLIFY_SITE_ID`; without them the workflow skips publishing. New Netlify sites may have "team login" visitor protection on, so switch visitor access to public in the site settings, or only your team can open it.
+- **https://susheelsanagapalli.github.io/valet-parking-system/**: the same demo on GitHub Pages (`.github/workflows/pages.yml`).
 
 GitHub Pages cannot run a server, so the Pages build runs the Valet server's own route code (`server/src/api.ts`) and data layer inside the browser. Everything works there: test logins on the sign-in page, check-in, parking spot with GPS, the queue, guest page, QR payments, handover, settings and tap-to-send SMS. The data is kept in that browser only (so open guest links in another tab of the same browser), and **Reset demo data** starts again. Google Sheets is not available in the Pages demo.
 
