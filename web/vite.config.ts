@@ -5,11 +5,11 @@ import { defineConfig } from 'vite';
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
-  // GitHub Pages serves the app under /<repository>/; VITE_BASE sets that path in the Pages build.
+  // VITE_BASE sets the path the app is served under (default /).
   base: process.env.VITE_BASE ?? '/',
   plugins: [react()],
   resolve: {
-    // The GitHub Pages demo runs the server's route code in the browser: use the data layer's
+    // The demo build runs the server's route code in the browser: use the data layer's
     // browser entry (no Excel/Google modules) and small browser versions of node:crypto and node:fs.
     alias: {
       '@valet/sheets-integration': here('../sheets-integration/src/core.ts'),

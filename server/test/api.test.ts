@@ -110,7 +110,7 @@ describe('test credentials (demo mode only)', () => {
     expect(res.body).toEqual({ enabled: false });
   });
 
-  it('lets a web app on GitHub Pages call the API only from allowed origins', async () => {
+  it('lets a web app on another domain call the API only from allowed origins', async () => {
     const corsApp = createApp({ repo, users, photos: new LocalPhotoStore(uploads), authSecret: 'auth', publicBaseUrl: 'x', corsOrigins: ['https://susheelsanagapalli.github.io'] });
     const ok = await request(corsApp).options('/api/auth/login').set('Origin', 'https://susheelsanagapalli.github.io');
     expect(ok.status).toBe(204);

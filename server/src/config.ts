@@ -31,7 +31,7 @@ export interface Config {
   googleRedirectUri: string;
   /** Git commit being run, reported by /api/health so deployments can confirm the new version is live. */
   commit?: string;
-  /** Other web app origins allowed to call the API, e.g. https://<user>.github.io for GitHub Pages. */
+  /** Other web app origins allowed to call the API, e.g. a web app hosted on another domain. */
   corsOrigins: string[];
   sms:
     | { provider: 'off' }

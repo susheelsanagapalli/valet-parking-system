@@ -1,5 +1,5 @@
 /**
- * The Valet server running inside the browser, for the GitHub Pages demo. It uses the same route
+ * The Valet server running inside the browser, for the demo site. It uses the same route
  * code (server/src/api.ts) and data layer as the real server, with in-memory data kept in this
  * browser's storage. Nothing is shared between devices, and Google Sheets and SMS gateways are off;
  * SMS uses tap-to-send through the phone's Messages app.
@@ -145,7 +145,7 @@ async function start() {
       password: DEMO_PASSWORD,
       pins,
       notice:
-        'Demo running in your browser on GitHub Pages: data stays on this device only, so open guest links on the same device. SMS opens your Messages app; Google Sheets is off.',
+        'Demo running in your browser: data stays on this device only, so open guest links on the same device. SMS opens your Messages app; Google Sheets is off.',
     },
     notifier,
     smsSettings,

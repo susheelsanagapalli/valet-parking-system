@@ -2,7 +2,7 @@
 
 All test logins for ValetPay in one place. They only work in **demo mode**, which runs:
 
-- on the demo sites: https://valetpay-demo.netlify.app and https://susheelsanagapalli.github.io/valet-parking-system/
+- on the demo site: https://valetpay-demo.netlify.app
 - locally with `npm start` (demo data, `SEED_DEMO` not false)
 
 The production site does not accept any of these. A test in `server/test/credentials-doc.test.ts` fails if this file no longer matches the demo accounts in `server/src/seedData.ts`, so keep the two in step.
