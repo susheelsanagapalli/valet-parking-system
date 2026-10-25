@@ -71,12 +71,12 @@ Every push to `main` runs the tests and build (`.github/workflows/ci.yml`); if t
 One-time setup:
 
 1. Sign up at https://render.com with GitHub and allow access to this repository.
-2. **New → Blueprint**, choose this repository and click **Apply**. Render reads `render.yaml` and creates the `valet-parking` web service (Singapore, free plan, random `AUTH_SECRET` and `PIN_HMAC_SECRET`).
+2. **New → Blueprint**, choose this repository and click **Apply**. Render reads `render.yaml` and creates the `valetpay` web service (Singapore, free plan, random `AUTH_SECRET` and `PIN_HMAC_SECRET`). The live test environment is **https://valetpay.onrender.com**.
 3. In the service, open **Settings → Deploy Hook** and copy the URL.
 4. In GitHub, add it as a secret and the service address as a variable:
    ```bash
    gh secret set RENDER_DEPLOY_HOOK_URL      # paste the Deploy Hook URL
-   gh variable set RENDER_SERVICE_URL --body "https://valet-parking.onrender.com"   # your service URL
+   gh variable set RENDER_SERVICE_URL --body "https://valetpay.onrender.com"   # your service URL
    ```
 5. Push to `main` (or run **Deploy to Render** from the Actions tab).
 
