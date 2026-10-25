@@ -2,7 +2,7 @@ const TOKEN_KEY = 'valet.token';
 
 /**
  * Address of the Valet server. Empty when the web app is served by the server itself; set
- * VITE_API_BASE (e.g. https://valet-parking.onrender.com) when the web app is hosted elsewhere,
+ * VITE_API_BASE (e.g. https://valetpay.onrender.com) when the web app is hosted elsewhere,
  * such as GitHub Pages.
  */
 export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '');

@@ -122,12 +122,12 @@ describe('test credentials (demo mode only)', () => {
 
   it('uses the hosting address on Render and keeps localhost locally', async () => {
     const { loadConfig } = await import('../src/config.js');
-    const hosted = loadConfig({ RENDER_EXTERNAL_URL: 'https://valet-parking.onrender.com', RENDER_GIT_COMMIT: 'abc123', DATA_DIR: '/var/data', PORT: '10000' });
+    const hosted = loadConfig({ RENDER_EXTERNAL_URL: 'https://valetpay.onrender.com', RENDER_GIT_COMMIT: 'abc123', DATA_DIR: '/var/data', PORT: '10000' });
     expect(hosted).toMatchObject({
       port: 10000,
       httpsPort: undefined,
-      publicBaseUrl: 'https://valet-parking.onrender.com',
-      googleRedirectUri: 'https://valet-parking.onrender.com/api/google/callback',
+      publicBaseUrl: 'https://valetpay.onrender.com',
+      googleRedirectUri: 'https://valetpay.onrender.com/api/google/callback',
       commit: 'abc123',
     });
     expect(hosted.googleSettingsPath.replace(/\\/g, '/')).toBe('/var/data/google-settings.json');
