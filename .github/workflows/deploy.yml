@@ -1,11 +1,11 @@
 name: Deploy to Render
 
-# Every push to main: run the tests and build, then deploy that exact commit to Render and wait
+# Every push to the production branch: run the tests and build, then deploy that exact commit to Render and wait
 # until Render reports it live. Optional: Render already deploys by itself after the checks pass
 # (render.yaml); this hook-based deploy only runs if the RENDER_DEPLOY_HOOK_URL secret is set.
 on:
   push:
-    branches: [main]
+    branches: [production]
   workflow_dispatch:
 
 concurrency:

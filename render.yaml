@@ -1,5 +1,5 @@
 # Render Blueprint: Render → New → Blueprint → pick this repository.
-# Render deploys every push to main by itself, but only after the GitHub checks (CI) pass.
+# Render deploys every push to the production branch by itself, but only after the GitHub checks (CI) pass.
 services:
   - type: web
     # Live at https://valetpay.onrender.com
@@ -7,7 +7,7 @@ services:
     runtime: node
     plan: free
     region: singapore
-    branch: main
+    branch: production
     autoDeployTrigger: checksPass
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
