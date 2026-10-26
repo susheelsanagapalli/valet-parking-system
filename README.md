@@ -99,6 +99,18 @@ The free plan sleeps after 15 minutes without visits (the first visit then takes
 
 Until go-live the site runs in demo mode, so the sign-in page shows the test logins to anyone with the link. Don't connect real guest data while demo mode is on. To go live, follow the [go-live checklist](#go-live-checklist).
 
+## Web app on Vercel
+
+`vercel.json` publishes the web app from the `production` branch on Vercel, and Vercel passes every `/api` request on to the Render server, so the browser only ever talks to the Vercel address (no CORS setup needed). The API, staff accounts and data stay on Render: Vercel runs short-lived functions, and the server keeps its data in one long-running process.
+
+One-time setup:
+
+1. Sign up at https://vercel.com with GitHub, **Add New → Project**, and import this repository. Leave the root directory as the repository root; Vercel reads the build settings from `vercel.json`.
+2. In the project's **Settings → Git**, set the production branch to `production`. Other branches are not deployed.
+3. In Render (valetpay → Environment), set `PUBLIC_BASE_URL` to the Vercel address (for example `https://valetpay.vercel.app`) so guest ticket links in SMS open the Vercel site.
+
+Google sign-in for Sheets still returns to the Render address, so keep `https://valetpay.onrender.com/api/google/callback` as the redirect URI.
+
 ## Guest SMS from your own number (free)
 
 Guests get an SMS with their ticket link and handover PIN at check-in, then "car ready", "parked again" (no-show), a receipt when the ticket closes, and a notice if a QR payment can't be found. Messages are sent from **your own mobile number** by an Android phone with that SIM, using a free gateway app. No paid SMS provider is needed.
